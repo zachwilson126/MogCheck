@@ -1,0 +1,9 @@
+# Claude Code internal
+.claude/
+
+# macOS
+.DS_Store
+
+# env files
+.env
+.env.*
