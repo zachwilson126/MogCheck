@@ -1,5 +1,6 @@
 # MogCheck - Full Build Prompt for Coding Agent
 
+
 ## Project Overview
 
 Build **MogCheck**, an iOS mobile app that rates users' facial attractiveness on a 1-10 scale using real mathematical facial ratio analysis (golden ratio, symmetry, facial thirds). The app targets Gen Z / Gen Alpha looksmaxxing culture with funny, sarcastic, slightly rude commentary. Think of it as a legitimate facial analysis tool wrapped in internet brain rot humor.

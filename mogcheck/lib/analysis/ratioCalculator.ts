@@ -69,41 +69,10 @@ function measureRatio(def: RatioDefinition, points: FacialPoints): number {
       return faceWidth > 0 ? jawWidth / faceWidth : 0;
     }
 
-    case 'lower_mid_face': {
-      const lowerFace = dist(points.noseBase, points.chin);
-      const midFace = dist(points.browCenter, points.noseBase);
-      return midFace > 0 ? lowerFace / midFace : 0;
-    }
-
-    case 'eye_width_face': {
-      const leftEyeWidth = dist(points.leftEyeInner, points.leftEyeOuter);
-      const rightEyeWidth = dist(points.rightEyeInner, points.rightEyeOuter);
-      const avgEyeWidth = (leftEyeWidth + rightEyeWidth) / 2;
-      const faceWidth = dist(points.leftCheek, points.rightCheek);
-      return faceWidth > 0 ? avgEyeWidth / faceWidth : 0;
-    }
-
-    case 'lip_ratio': {
-      const upperLipHeight = dist(points.upperLipTop, points.upperLipBottom);
-      const lowerLipHeight = dist(points.lowerLipTop, points.lowerLipBottom);
-      return lowerLipHeight > 0 ? upperLipHeight / lowerLipHeight : 0;
-    }
-
     case 'nose_face_length': {
       const noseLength = dist(points.nasion, points.noseBase);
       const faceLength = dist(points.hairline, points.chin);
       return faceLength > 0 ? noseLength / faceLength : 0;
-    }
-
-    case 'chin_lower_face': {
-      // Approximate labiale inferius as midpoint of lower lip bottom and chin
-      const labialeInferius = {
-        x: (points.lowerLipBottom.x + points.chin.x) / 2,
-        y: (points.lowerLipBottom.y + points.chin.y) / 2,
-      };
-      const chinToLabiale = dist(labialeInferius, points.chin);
-      const lowerFace = dist(points.noseBase, points.chin);
-      return lowerFace > 0 ? chinToLabiale / lowerFace : 0;
     }
 
     default:
@@ -136,12 +105,14 @@ function calculateDeviation(measured: number, def: RatioDefinition): number {
  * - 5-15% deviation → 0.7-0.9 (score 7-8)
  * - 15-25% deviation → 0.5-0.7 (score 5-6)
  * - 25-40% deviation → 0.3-0.5 (score 3-4)
- * - 40%+ deviation → 0.1-0.3 (score 1-2)
+ * - 50%+ deviation → 0-0.2 (score 0-2)
  *
- * Using a penalty multiplier of ~3.0 achieves this curve.
+ * Using a penalty multiplier of 2.0 with a floor of 0.
+ * The previous 3.0 was too harsh — any 33%+ deviation scored 0,
+ * leaving no room for MLKit landmark imprecision.
  */
 function deviationToScore(deviation: number): number {
-  const penaltyMultiplier = 3.0;
+  const penaltyMultiplier = 2.0;
   return Math.max(0, 1 - deviation * penaltyMultiplier);
 }
 

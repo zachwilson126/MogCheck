@@ -215,6 +215,12 @@ export const useUserStore = create<UserState>()(
         scanHistory: state.scanHistory,
         disclaimerAccepted: state.disclaimerAccepted,
       }),
+      // Dev mode: ensure at least 1000 coins for testing
+      onRehydrateStorage: () => (state) => {
+        if (__DEV__ && state && state.coins < 1000) {
+          state.coins = 1000;
+        }
+      },
     },
   ),
 );

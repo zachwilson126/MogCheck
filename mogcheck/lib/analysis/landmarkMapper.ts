@@ -112,14 +112,23 @@ function distance(a: Point, b: Point): number {
 
 /**
  * Estimate hairline position from face bounds and brow points.
- * The hairline is approximately the same distance above the brows
- * as the brows are from the nose base (equal facial thirds).
+ *
+ * Strategy: use the top of the MLKit face bounding box as a baseline.
+ * MLKit's bbox top closely approximates the hairline/trichion.
+ * We also cross-check with the brow-mirror method and take whichever
+ * places the hairline higher (further from chin) for robustness.
  */
 function estimateHairline(browCenter: Point, noseBase: Point, faceBounds: MLKitFaceData['bounds']): Point {
-  const browToNose = noseBase.y - browCenter.y;
+  const browToNose = Math.abs(noseBase.y - browCenter.y);
+  // Method 1: mirror brow-to-nose distance above the brows
+  const mirrorY = browCenter.y - browToNose;
+  // Method 2: top of the face bounding box
+  const bboxTopY = faceBounds.y;
+  // Take whichever is higher (smaller y = closer to actual hairline)
+  const hairlineY = Math.min(mirrorY, bboxTopY);
   return {
     x: browCenter.x,
-    y: Math.max(faceBounds.y, browCenter.y - browToNose),
+    y: hairlineY,
   };
 }
 
@@ -181,7 +190,10 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
   const upperLipTopPt = upperLipTop.length > 0 ? upperLipTop[Math.floor(upperLipTop.length / 2)] : midpoint(mouthLeft, mouthRight);
   const upperLipBottomPt = upperLipBottom.length > 0 ? upperLipBottom[Math.floor(upperLipBottom.length / 2)] : { x: upperLipTopPt.x, y: upperLipTopPt.y + 3 };
   const lowerLipTopPt = lowerLipTop.length > 0 ? lowerLipTop[Math.floor(lowerLipTop.length / 2)] : { x: upperLipBottomPt.x, y: upperLipBottomPt.y + 2 };
-  const lowerLipBottomPt = lowerLipBottom.length > 0 ? lowerLipBottom[Math.floor(lowerLipBottom.length / 2)] : landmarks.MOUTH_BOTTOM ?? { x: lowerLipTopPt.x, y: lowerLipTopPt.y + 5 };
+  // Prefer MOUTH_BOTTOM landmark for lip bottom — it's the true outer bottom edge.
+  // The LOWER_LIP_BOTTOM contour middle point can be too close to the lip opening.
+  const lowerLipBottomPt = landmarks.MOUTH_BOTTOM
+    ?? (lowerLipBottom.length > 0 ? lowerLipBottom[Math.floor(lowerLipBottom.length / 2)] : { x: lowerLipTopPt.x, y: lowerLipTopPt.y + 5 });
 
   // Chin — lowest point on face contour
   const chin = faceContour.reduce((lowest, pt) => pt.y > lowest.y ? pt : lowest, faceContour[0]);
@@ -189,21 +201,41 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
   // Hairline (estimated)
   const hairline = estimateHairline(browCenter, noseBase, bounds);
 
-  // Jaw (gonion) — find the points on face contour that are roughly at mouth height
+  // Split contour into left/right halves
+  const faceMidX = bounds.x + bounds.width / 2;
+  const leftSide = faceContour.filter(p => p.x < faceMidX);
+  const rightSide = faceContour.filter(p => p.x >= faceMidX);
+
+  // Jaw (gonion) — face contour points closest to mouth height
   const mouthY = mouthLeft.y;
-  const leftSide = faceContour.filter(p => p.x < bounds.x + bounds.width / 2);
-  const rightSide = faceContour.filter(p => p.x > bounds.x + bounds.width / 2);
   const leftJaw = leftSide.reduce((best, pt) => Math.abs(pt.y - mouthY) < Math.abs(best.y - mouthY) ? pt : best, leftSide[0] ?? { x: bounds.x, y: mouthY });
   const rightJaw = rightSide.reduce((best, pt) => Math.abs(pt.y - mouthY) < Math.abs(best.y - mouthY) ? pt : best, rightSide[0] ?? { x: bounds.x + bounds.width, y: mouthY });
 
-  // Cheeks (widest points — bizygomatic)
-  const leftCheek = landmarks.LEFT_CHEEK ?? leftSide.reduce((widest, pt) => pt.x < widest.x ? pt : widest, leftSide[0] ?? { x: bounds.x, y: bounds.y + bounds.height / 2 });
-  const rightCheek = landmarks.RIGHT_CHEEK ?? rightSide.reduce((widest, pt) => pt.x > widest.x ? pt : widest, rightSide[0] ?? { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 });
+  // Cheeks (bizygomatic width) — widest contour points in the CHEEKBONE region only.
+  // The full contour includes ears/temples which are wider than the bizygomatic arch.
+  // Restrict to points between eye level and nose level for accurate cheek width.
+  const eyeY = (leftEyeCenter.y + rightEyeCenter.y) / 2;
+  const cheekMinY = eyeY;
+  const cheekMaxY = noseBase.y;
+  const leftCheekRegion = leftSide.filter(p => p.y >= cheekMinY && p.y <= cheekMaxY);
+  const rightCheekRegion = rightSide.filter(p => p.y >= cheekMinY && p.y <= cheekMaxY);
 
-  // Split contour into left/right for symmetry
-  const faceMidX = (leftCheek.x + rightCheek.x) / 2;
-  const leftContour = faceContour.filter(p => p.x <= faceMidX);
-  const rightContour = faceContour.filter(p => p.x > faceMidX);
+  // Find widest point in cheek region; fall back to widest overall if region is empty
+  const leftCheek = leftCheekRegion.length > 0
+    ? leftCheekRegion.reduce((widest, pt) => pt.x < widest.x ? pt : widest, leftCheekRegion[0])
+    : leftSide.length > 0
+      ? leftSide.reduce((widest, pt) => pt.x < widest.x ? pt : widest, leftSide[0])
+      : { x: bounds.x, y: bounds.y + bounds.height / 2 };
+  const rightCheek = rightCheekRegion.length > 0
+    ? rightCheekRegion.reduce((widest, pt) => pt.x > widest.x ? pt : widest, rightCheekRegion[0])
+    : rightSide.length > 0
+      ? rightSide.reduce((widest, pt) => pt.x > widest.x ? pt : widest, rightSide[0])
+      : { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 };
+
+  // Split contour into left/right for symmetry (use cheek midpoint as center)
+  const symmetryMidX = (leftCheek.x + rightCheek.x) / 2;
+  const leftContour = faceContour.filter(p => p.x <= symmetryMidX);
+  const rightContour = faceContour.filter(p => p.x > symmetryMidX);
 
   return {
     hairline,
