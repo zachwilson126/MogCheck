@@ -15,14 +15,14 @@ export default function HistoryScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.title}>SCAN HISTORY</Text>
+        <Text style={styles.title}>SCAN HISTORY 📋</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {scanHistory.length === 0 ? (
         <View style={styles.empty}>
           <MaterialCommunityIcons name="history" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No scans yet</Text>
+          <Text style={styles.emptyText}>no data on u yet 👀</Text>
         </View>
       ) : (
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>

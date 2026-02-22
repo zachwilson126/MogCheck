@@ -70,14 +70,14 @@ export default function SettingsScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.title}>SETTINGS</Text>
+        <Text style={styles.title}>SETTINGS ⚙️</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {/* Stats Summary */}
         <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>Your Stats</Text>
+          <Text style={styles.statsTitle}>Your Stats 📊</Text>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{totalScans}</Text>
@@ -108,7 +108,7 @@ export default function SettingsScreen() {
         ))}
 
         {/* Account */}
-        <Text style={styles.sectionTitle}>Account</Text>
+        <Text style={styles.sectionTitle}>Account 👤</Text>
         {isAuthenticated ? (
           <>
             {username && (

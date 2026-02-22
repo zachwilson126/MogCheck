@@ -13,6 +13,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../lib/constants/theme';
 import { tierColors } from '../../lib/constants/theme';
+import { useScreenShake } from '../../lib/hooks/useScreenShake';
 
 interface ScoreRevealProps {
   score: number;
@@ -28,6 +29,7 @@ export function ScoreReveal({ score, tierName, tierColor, onRevealComplete }: Sc
   const tierOpacity = useSharedValue(0);
   const tierScale = useSharedValue(0.3);
   const tierTranslateY = useSharedValue(-30);
+  const { shakeX, triggerShake } = useScreenShake();
 
   useEffect(() => {
     // Animate score counting up
@@ -48,9 +50,10 @@ export function ScoreReveal({ score, tierName, tierColor, onRevealComplete }: Sc
     );
     tierTranslateY.value = withDelay(2200, withSpring(0, { damping: 12, stiffness: 100 }));
 
-    // Haptic on tier reveal
+    // Haptic + screen shake on tier reveal
     const timer = setTimeout(() => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      triggerShake();
       onRevealComplete?.();
     }, 2600);
 
@@ -75,8 +78,12 @@ export function ScoreReveal({ score, tierName, tierColor, onRevealComplete }: Sc
     ],
   }));
 
+  const containerShakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, containerShakeStyle]}>
       <Animated.View style={[styles.scoreContainer, scoreStyle]}>
         <AnimatedScore score={score} tierColor={tierColor} />
       </Animated.View>
@@ -85,7 +92,7 @@ export function ScoreReveal({ score, tierName, tierColor, onRevealComplete }: Sc
           <Text style={[styles.tierText, { color: tierColor }]}>{tierName}</Text>
         </View>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 

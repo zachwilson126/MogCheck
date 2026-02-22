@@ -173,40 +173,33 @@ export function validateFacialPoints(points: FacialPoints): boolean {
   const eyeSpan = Math.abs(points.rightEyeCenter.x - points.leftEyeCenter.x);
   if (eyeSpan < 5) return false;
 
+  // Face length:width sanity check — reject extreme frames
+  const faceLength = Math.sqrt(
+    (points.hairline.x - points.chin.x) ** 2 + (points.hairline.y - points.chin.y) ** 2,
+  );
+  const faceLW = faceLength / cheekWidth;
+  if (faceLW < 1.2 || faceLW > 2.2) return false;
+
   return true;
 }
 
 /**
- * Estimate hairline position from face bounds and brow points.
+ * Estimate hairline position from brow and nose points only.
  *
- * Strategy: average two estimation methods and clamp to a reasonable range.
- * - Method 1: mirror the brow-to-nose distance above the brows
- * - Method 2: top of the MLKit face bounding box
- *
- * Previously took min (highest) of both which could place hairline
- * unrealistically high, inflating face length and skewing facial thirds.
- * Now we average them and cap at 1.3x the brow-to-nose distance above
- * the brows (the upper third shouldn't exceed ~130% of the middle third).
+ * Uses a single deterministic method: mirror the brow-to-nose distance
+ * above the brows (upper third ≈ middle third). This avoids the bounding
+ * box top (bboxTopY) which is the biggest noise source — it shifts with
+ * hair, lighting, and head tilt between frames.
  */
-function estimateHairline(browCenter: Point, noseBase: Point, faceBounds: MLKitFaceData['bounds']): Point {
+function estimateHairline(browCenter: Point, noseBase: Point, _faceBounds: MLKitFaceData['bounds']): Point {
   const browToNose = Math.abs(noseBase.y - browCenter.y);
 
-  // Method 1: mirror brow-to-nose distance above the brows
-  const mirrorY = browCenter.y - browToNose;
-  // Method 2: top of the face bounding box
-  const bboxTopY = faceBounds.y;
-
-  // Average the two estimates
-  const avgY = (mirrorY + bboxTopY) / 2;
-
-  // Cap: hairline should not be more than 1.3x the middle-third distance
-  // above the brows (prevents wild overestimates from loose bounding boxes)
-  const maxDistance = browToNose * 1.3;
-  const cappedY = Math.max(avgY, browCenter.y - maxDistance);
+  // Upper third ≈ middle third: place hairline one brow-to-nose distance above brows
+  const hairlineY = browCenter.y - browToNose;
 
   return {
     x: browCenter.x,
-    y: cappedY,
+    y: hairlineY,
   };
 }
 
@@ -270,8 +263,11 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
     : { x: rightEyeOuter.x, y: rightEyeOuter.y - bounds.height * 0.05 };
   const browCenter = midpoint(leftBrowInner, rightBrowInner);
 
-  // Nose
-  const nasion = noseBridge.length > 0 ? noseBridge[0] : midpoint(leftEyeCenter, rightEyeCenter);
+  // Nose — nasion is at the bridge of the nose at EYE LEVEL, not mid-bridge.
+  // MLKit's noseBridge[0] is often placed mid-bridge, which makes the nose
+  // measure at half its true length. Use the inner eye corner midpoint instead,
+  // which is anatomically correct for the nasion position.
+  const nasion = midpoint(leftEyeInner, rightEyeInner);
   const noseTip = noseBridge.length > 1 ? noseBridge[noseBridge.length - 1] : landmarks.NOSE_BASE ?? midpoint(leftEyeCenter, rightEyeCenter);
   const noseBase = landmarks.NOSE_BASE ?? (noseBottom.length > 0 ? noseBottom[Math.floor(noseBottom.length / 2)] : noseTip);
   const leftNoseAlar = noseBottom.length > 0 ? noseBottom[0] : { x: noseBase.x - bounds.width * 0.05, y: noseBase.y };

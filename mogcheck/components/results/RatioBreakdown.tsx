@@ -19,7 +19,7 @@ const CHART_RADIUS = CHART_SIZE / 2 - 30;
 export function RatioBreakdown({ ratios, tierColor }: RatioBreakdownProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Ratio Breakdown</Text>
+      <Text style={styles.title}>Ratio Breakdown 📐</Text>
 
       {/* Radar Chart */}
       <View style={styles.chartContainer}>

@@ -49,13 +49,13 @@ export default function BattleScreen() {
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>MOG BATTLE</Text>
+          <Text style={styles.headerTitle}>MOG BATTLE ⚔️</Text>
           <CoinBalance size="small" />
         </View>
 
         <View style={styles.centered}>
           <MaterialCommunityIcons name="sword-cross" size={64} color={colors.chad} />
-          <Text style={styles.waitingTitle}>BATTLE READY</Text>
+          <Text style={styles.waitingTitle}>BATTLE READY 🥊</Text>
           <Text style={styles.waitingText}>
             Your score: {challengerScan.score.toFixed(1)} ({challengerScan.tierName})
           </Text>
@@ -119,7 +119,7 @@ export default function BattleScreen() {
         <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
           <MaterialCommunityIcons name="close" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>MOG BATTLE</Text>
+        <Text style={styles.headerTitle}>MOG BATTLE ⚔️</Text>
         <CoinBalance size="small" />
       </View>
 
@@ -141,7 +141,7 @@ export default function BattleScreen() {
 
         {/* Category comparison */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Category Breakdown</Text>
+          <Text style={styles.sectionTitle}>Category Breakdown 📊</Text>
           <BattleComparison
             challengerAnalysis={challengerAnalysis}
             opponentAnalysis={opponentAnalysis}
@@ -167,13 +167,13 @@ export default function BattleScreen() {
         {/* Actions */}
         <View style={styles.actions}>
           <GlowButton
-            title="Share Battle"
+            title="Share Battle 📤"
             onPress={() => handleShareBattleResult(challengerAnalysis.score, opponentAnalysis.score, challengerWon)}
             variant="secondary"
             size="medium"
           />
           <GlowButton
-            title="Rematch"
+            title="Rematch 🔄"
             onPress={() => router.push('/scan')}
             variant="outline"
             size="medium"

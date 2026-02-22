@@ -71,13 +71,21 @@ const PLACEHOLDER_PLANS: PlanData[] = [
 ];
 
 /**
- * Pick a plan index based on scan score + timestamp so different scans
- * get different plans, and repeated taps on the same scan cycle through them.
+ * Build a randomized plan by picking a random entry PER CATEGORY
+ * from the 5 placeholder plans, so each generated plan is unique.
  */
-function getNextPlanIndex(score: number, tapCount: number): number {
-  // Use score as seed so different scans start at different plans
-  const scoreSeed = Math.floor(score * 100);
-  return (scoreSeed + tapCount) % PLACEHOLDER_PLANS.length;
+function buildRandomPlan(): PlanData {
+  const pick = (key: keyof PlanData) => {
+    const options = PLACEHOLDER_PLANS.map(p => p[key]).filter(Boolean);
+    return options[Math.floor(Math.random() * options.length)];
+  };
+  return {
+    mewing_jaw: pick('mewing_jaw'),
+    skin: pick('skin'),
+    hair: pick('hair'),
+    fitness: pick('fitness'),
+    style: pick('style'),
+  };
 }
 
 export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
@@ -85,16 +93,9 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tapCount, setTapCount] = useState(0);
   const coins = useUserStore((s) => s.coins);
   const spendCoins = useUserStore((s) => s.spendCoins);
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
-
-  const selectPlaceholderPlan = () => {
-    const idx = getNextPlanIndex(analysis.score, tapCount);
-    setTapCount((c) => c + 1);
-    return PLACEHOLDER_PLANS[idx];
-  };
 
   const handleGetPlan = async () => {
     setError(null);
@@ -123,7 +124,7 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
         if (result.plan && typeof result.plan === 'object') {
           setPlan(result.plan as unknown as PlanData);
         } else {
-          setPlan(selectPlaceholderPlan());
+          setPlan(buildRandomPlan());
         }
       } else {
         const spent = await spendCoins(2, 'ascension');
@@ -133,10 +134,10 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
           return;
         }
         await new Promise((r) => setTimeout(r, 2000));
-        setPlan(selectPlaceholderPlan());
+        setPlan(buildRandomPlan());
       }
     } catch {
-      setPlan(selectPlaceholderPlan());
+      setPlan(buildRandomPlan());
     } finally {
       setLoading(false);
     }
@@ -145,7 +146,7 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
   if (plan) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.title, { color: tierColor }]}>ASCENSION PLAN</Text>
+        <Text style={[styles.title, { color: tierColor }]}>ASCENSION PLAN 📈</Text>
 
         {PLAN_CATEGORIES.map((cat) => {
           const content = plan[cat.key];
@@ -178,7 +179,7 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
 
   return (
     <View style={styles.ctaCard}>
-      <Text style={styles.ctaTitle}>ASCENSION PLAN</Text>
+      <Text style={styles.ctaTitle}>ASCENSION PLAN 📈</Text>
       <Text style={styles.ctaDescription}>
         Personalized (and actually helpful) improvement tips for your specific ratios.
       </Text>

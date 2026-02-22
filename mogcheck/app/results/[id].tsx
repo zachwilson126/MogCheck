@@ -42,10 +42,14 @@ export default function ResultsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
+        <Pressable
+          onPress={() => router.replace('/')}
+          style={styles.backButton}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <MaterialCommunityIcons name="close" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>RESULTS</Text>
+        <Text style={styles.headerTitle}>RESULTS 🧬</Text>
         <CoinBalance size="small" />
       </View>
 
@@ -67,8 +71,8 @@ export default function ResultsScreen() {
         </Text>
 
         {/* Symmetry */}
-        <View style={styles.symmetryCard}>
-          <Text style={styles.symmetryLabel}>SYMMETRY</Text>
+        <View style={[styles.symmetryCard, { borderWidth: 1, borderColor: tierColor }]}>
+          <Text style={styles.symmetryLabel}>SYMMETRY ⚖️</Text>
           <Text style={[styles.symmetryValue, { color: tierColor }]}>
             {Math.round(analysis.symmetry.percentage)}%
           </Text>
@@ -77,14 +81,14 @@ export default function ResultsScreen() {
         {/* Strongest / Weakest */}
         <View style={styles.featuresRow}>
           <View style={[styles.featureCard, { borderColor: colors.primary }]}>
-            <Text style={styles.featureLabel}>STRONGEST</Text>
+            <Text style={styles.featureLabel}>STRONGEST 💪</Text>
             <Text style={styles.featureName}>{analysis.strongestRatio.name}</Text>
             <Text style={[styles.featureScore, { color: colors.primary }]}>
               {(analysis.strongestRatio.score * 10).toFixed(1)}
             </Text>
           </View>
           <View style={[styles.featureCard, { borderColor: colors.error }]}>
-            <Text style={styles.featureLabel}>WEAKEST</Text>
+            <Text style={styles.featureLabel}>WEAKEST 💀</Text>
             <Text style={styles.featureName}>{analysis.weakestRatio.name}</Text>
             <Text style={[styles.featureScore, { color: colors.error }]}>
               {(analysis.weakestRatio.score * 10).toFixed(1)}
@@ -108,14 +112,14 @@ export default function ResultsScreen() {
         {/* Action Buttons */}
         <View style={styles.actions}>
           <GlowButton
-            title="Mog Battle"
+            title="Mog Battle ⚔️"
             onPress={() => router.push(`/battle/${scan.id}`)}
             variant="outline"
             size="medium"
             color={colors.chad}
           />
           <GlowButton
-            title="Share Results"
+            title="Share Results 📤"
             onPress={() => shareResults(viewShotRef)}
             variant="secondary"
             size="medium"
@@ -166,13 +170,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   backButton: {
-    padding: 8,
+    padding: 12,
+    zIndex: 10,
   },
   headerTitle: {
     fontFamily: 'BebasNeue_400Regular',
     fontSize: 20,
     color: colors.text,
     letterSpacing: 2,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
   },
   scroll: {
     flex: 1,

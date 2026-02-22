@@ -80,7 +80,7 @@ export function GlowButton({
         sizeStyles[size],
         isPrimary && { backgroundColor: color },
         isOutline && { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: color },
-        !isPrimary && !isOutline && { backgroundColor: colors.surfaceVariant },
+        !isPrimary && !isOutline && { backgroundColor: 'rgba(57, 255, 20, 0.15)' },
         disabled && { opacity: 0.5 },
         style,
       ]}
@@ -100,7 +100,7 @@ export function GlowButton({
           { fontSize: fontSizes[size] },
           isPrimary && { color: colors.background },
           isOutline && { color },
-          !isPrimary && !isOutline && { color: colors.text },
+          !isPrimary && !isOutline && { color: colors.primary },
         ]}
       >
         {title}

@@ -94,7 +94,7 @@ export default function LeaderboardScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.title}>LEADERBOARD</Text>
+        <Text style={styles.title}>LEADERBOARD 👑</Text>
         <CoinBalance size="small" />
       </View>
 
@@ -129,7 +129,7 @@ export default function LeaderboardScreen() {
       ) : entries.length === 0 ? (
         <View style={styles.centered}>
           <MaterialCommunityIcons name="trophy-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No one on the leaderboard yet</Text>
+          <Text style={styles.emptyText}>no one brave enough yet 😤</Text>
           <Text style={styles.emptySubtext}>Be the first to opt in</Text>
         </View>
       ) : (
@@ -143,7 +143,7 @@ export default function LeaderboardScreen() {
             const tierColor = tierColors[item.tier] ?? colors.text;
 
             return (
-              <View style={[styles.entryRow, isMe && styles.entryRowMe]}>
+              <View style={[styles.entryRow, isMe && styles.entryRowMe, rank <= 3 && { shadowColor: tierColor, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, borderWidth: 1, borderColor: tierColor }]}>
                 <Text style={[styles.rank, rank <= 3 && { color: colors.chad }]}>
                   {rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : `#${rank}`}
                 </Text>

@@ -15,6 +15,8 @@ export interface RatioDefinition {
   ideal: number;
   /** If set, defines an acceptable range [idealLow, idealHigh] instead of a single point */
   idealRange?: [number, number];
+  /** Physiologically possible range — measurements outside this are bad data, scored neutral */
+  validRange?: [number, number];
   /** Weight as a fraction (all weights should sum to 1.0) */
   weight: number;
   /** Category for grouping in UI */
@@ -28,6 +30,8 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     name: 'Face Length:Width',
     description: 'Hairline-to-chin ÷ bizygomatic width',
     ideal: PHI,
+    idealRange: [1.45, 1.75],
+    validRange: [1.0, 2.5],   // faces are always longer than wide
     weight: 0.20,
     category: 'primary',
   },
@@ -37,6 +41,7 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     description: 'Inter-pupillary distance ÷ face width',
     ideal: 0.45,
     idealRange: [0.42, 0.48],
+    validRange: [0.2, 0.7],
     weight: 0.18,
     category: 'primary',
   },
@@ -45,6 +50,7 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     name: 'Nose:Mouth Width',
     description: 'Alar width ÷ mouth width',
     ideal: INV_PHI,
+    validRange: [0.3, 1.0],
     weight: 0.16,
     category: 'primary',
   },
@@ -54,6 +60,7 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     description: 'Gonial width ÷ bizygomatic width',
     ideal: 0.775,
     idealRange: [0.72, 0.83],
+    validRange: [0.4, 1.1],
     weight: 0.18,
     category: 'primary',
   },
@@ -65,6 +72,7 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     description: 'Nasion-to-subnasale ÷ trichion-to-menton',
     ideal: 0.315,
     idealRange: [0.28, 0.35],
+    validRange: [0.15, 0.50],  // nose is 15-50% of face length max
     weight: 0.13,
     category: 'secondary',
   },

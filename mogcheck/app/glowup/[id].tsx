@@ -136,7 +136,7 @@ export default function GlowUpScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>GLOW UP</Text>
+        <Text style={styles.headerTitle}>GLOW UP ✨</Text>
         <CoinBalance size="small" />
       </View>
 
@@ -228,7 +228,7 @@ export default function GlowUpScreen() {
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.loadingText}>Generating your glow up...</Text>
+                <Text style={styles.loadingText}>cooking ur glow up... 🧑‍🍳</Text>
                 <Text style={styles.loadingSubtext}>This may take 10-20 seconds</Text>
               </View>
             ) : (

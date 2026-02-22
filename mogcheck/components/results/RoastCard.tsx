@@ -89,7 +89,7 @@ export function RoastCard({ tierName, tierColor, analysis }: RoastCardProps) {
   if (roastText) {
     return (
       <View style={[styles.card, { borderColor: tierColor }]}>
-        <Text style={styles.label}>AI ROAST</Text>
+        <Text style={styles.label}>AI ROAST 🔥</Text>
         <Text style={styles.roastText}>{roastText}</Text>
       </View>
     );
@@ -97,7 +97,7 @@ export function RoastCard({ tierName, tierColor, analysis }: RoastCardProps) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.label}>WANT TO GET ROASTED?</Text>
+      <Text style={styles.label}>WANT TO GET ROASTED? 💀</Text>
       <Text style={styles.description}>
         AI-generated personalized commentary based on your specific ratios.
       </Text>

@@ -23,37 +23,45 @@ function dist(a: Point, b: Point): number {
 }
 
 /**
- * Get robust face width using cheeks as primary, with fallbacks to
- * jaw width or eye outer corners if cheeks are too close together.
+ * Get robust face width using cheeks as primary, with jaw and eye fallbacks.
+ * Never returns 0 — always provides a usable measurement.
  */
 function getFaceWidth(points: FacialPoints): number {
+  // Primary: cheek-to-cheek (bizygomatic width)
   const cheekWidth = dist(points.leftCheek, points.rightCheek);
-  if (cheekWidth > 10) return cheekWidth;
+  if (cheekWidth > 5) return cheekWidth;
 
-  // Fallback 1: jaw width (typically ~75-80% of face width)
+  // Fallback 1: jaw width (gonion-to-gonion, slightly narrower than cheeks)
   const jawWidth = dist(points.leftJaw, points.rightJaw);
-  if (jawWidth > 10) return jawWidth / 0.775;
+  if (jawWidth > 5) return jawWidth;
 
-  // Fallback 2: outer eye corners (typically ~70% of face width)
+  // Fallback 2: outer eye corner distance (narrower than face, but usable)
   const eyeWidth = dist(points.leftEyeOuter, points.rightEyeOuter);
-  if (eyeWidth > 5) return eyeWidth / 0.7;
+  if (eyeWidth > 5) return eyeWidth;
 
-  return 0;
+  // Last resort: x-distance between cheeks (avoids dist returning 0 if points overlap)
+  return Math.max(Math.abs(points.rightCheek.x - points.leftCheek.x), 1);
 }
 
 /**
- * Get robust face length using hairline-to-chin as primary, with fallback
- * to browCenter-to-chin extrapolated (upper third ≈ middle third).
+ * Get robust face length using hairline-to-chin as primary, with fallbacks.
+ * Never returns 0 — always provides a usable measurement.
  */
 function getFaceLength(points: FacialPoints): number {
+  // Primary: hairline to chin (full face length)
   const fullLength = dist(points.hairline, points.chin);
-  if (fullLength > 10) return fullLength;
+  if (fullLength > 5) return fullLength;
 
-  // Fallback: browCenter-to-chin covers ~2/3 of face length
+  // Fallback 1: browCenter-to-chin covers ~2/3 of face length
   const browToChin = dist(points.browCenter, points.chin);
   if (browToChin > 5) return browToChin * 1.5;
 
-  return 0;
+  // Fallback 2: nasion-to-chin covers ~2/3 of face length
+  const nasionToChin = dist(points.nasion, points.chin);
+  if (nasionToChin > 5) return nasionToChin * 1.5;
+
+  // Last resort: y-distance between hairline and chin
+  return Math.max(Math.abs(points.chin.y - points.hairline.y), 1);
 }
 
 /**
@@ -86,7 +94,12 @@ function measureRatio(def: RatioDefinition, points: FacialPoints): number {
     }
 
     case 'nose_face_length': {
-      const noseLength = dist(points.nasion, points.noseBase);
+      let noseLength = dist(points.nasion, points.noseBase);
+      // If nasion and noseBase overlap (both fell back to eye midpoint),
+      // estimate nose length from browCenter to noseBase instead
+      if (noseLength < 3) {
+        noseLength = dist(points.browCenter, points.noseBase);
+      }
       const faceLength = getFaceLength(points);
       return faceLength > 0 ? noseLength / faceLength : 0;
     }
@@ -141,8 +154,11 @@ export function calculateRatios(points: FacialPoints): RatioResult[] {
   return RATIO_DEFINITIONS.map((def) => {
     const measured = measureRatio(def, points);
 
-    // Guard: if measurement is 0 or negative, data is bad — assign neutral score
-    if (measured <= 0) {
+    // Guard: if measurement is 0/negative or outside physiologically possible range,
+    // data is bad — assign neutral score instead of punishing with 0
+    const outOfValidRange = def.validRange
+      && (measured < def.validRange[0] || measured > def.validRange[1]);
+    if (measured <= 0 || outOfValidRange) {
       return {
         id: def.id,
         name: def.name,
@@ -150,7 +166,7 @@ export function calculateRatios(points: FacialPoints): RatioResult[] {
         measured,
         ideal: def.ideal,
         deviation: 0,
-        score: 0.5, // Neutral — don't penalize or reward
+        score: 0.5, // Neutral — don't penalize or reward bad data
         weight: def.weight,
         category: def.category,
       };

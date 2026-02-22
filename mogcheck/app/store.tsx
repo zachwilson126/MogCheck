@@ -10,6 +10,7 @@ import { GlowButton } from '../components/shared/GlowButton';
 import { useUserStore } from '../lib/store/useUserStore';
 import { COIN_PACKS, GIFT_PACKS, FEATURE_COSTS, CoinPack, GiftPack } from '../lib/constants/iap';
 import { loadProducts, purchaseCoinPack, initIAP } from '../lib/api/iap';
+import { WatchAdButton } from '../components/shared/WatchAdButton';
 
 export default function StoreScreen() {
   const router = useRouter();
@@ -57,7 +58,7 @@ export default function StoreScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.title}>COIN STORE</Text>
+        <Text style={styles.title}>COIN STORE 🪙</Text>
         <CoinBalance size="small" />
       </View>
 
@@ -66,22 +67,26 @@ export default function StoreScreen() {
         <View style={styles.costRef}>
           <Text style={styles.costRefTitle}>What coins get you:</Text>
           <View style={styles.costRow}>
-            <Text style={styles.costItem}>AI Roast</Text>
+            <Text style={styles.costItem}>🔥 AI Roast</Text>
             <Text style={styles.costValue}>{FEATURE_COSTS.roast} coin</Text>
           </View>
           <View style={styles.costRow}>
-            <Text style={styles.costItem}>Battle Verdict</Text>
+            <Text style={styles.costItem}>⚔️ Battle Verdict</Text>
             <Text style={styles.costValue}>{FEATURE_COSTS.battle_verdict} coin</Text>
           </View>
           <View style={styles.costRow}>
-            <Text style={styles.costItem}>Ascension Plan</Text>
+            <Text style={styles.costItem}>📈 Ascension Plan</Text>
             <Text style={styles.costValue}>{FEATURE_COSTS.ascension_plan} coins</Text>
           </View>
           {/* Glow Up — coming in v1.1 */}
         </View>
 
+        {/* Watch Ad for Free Coin */}
+        <WatchAdButton />
+        <View style={{ height: 24 }} />
+
         {/* Coin Packs */}
-        <Text style={styles.sectionTitle}>Coin Packs</Text>
+        <Text style={styles.sectionTitle}>Coin Packs 💰</Text>
         <View style={styles.packsGrid}>
           {COIN_PACKS.map((pack) => (
             <CoinPackCard
@@ -98,7 +103,7 @@ export default function StoreScreen() {
         <Pressable style={styles.giftHeader} onPress={() => setShowGifts(!showGifts)}>
           <View style={styles.giftHeaderLeft}>
             <MaterialCommunityIcons name="gift" size={22} color={colors.chad} />
-            <Text style={styles.sectionTitle}>Gift Coins</Text>
+            <Text style={styles.sectionTitle}>Gift Coins 🎁</Text>
           </View>
           <MaterialCommunityIcons
             name={showGifts ? 'chevron-up' : 'chevron-down'}
@@ -146,7 +151,7 @@ function CoinPackCard({
   const displayPrice = product?.displayPrice ?? pack.price;
 
   return (
-    <View style={[styles.packCard, pack.isPopular && styles.packCardPopular]}>
+    <View style={[styles.packCard, pack.isPopular && styles.packCardPopular, pack.isPopular && { shadowColor: colors.primary, shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } }]}>
       {pack.isPopular && <Text style={styles.popularBadge}>POPULAR</Text>}
       <Text style={styles.packName}>{pack.name}</Text>
       <View style={styles.coinRow}>

@@ -118,7 +118,7 @@ export default function AuthScreen() {
       >
         <Text style={styles.logo}>MOGCHECK</Text>
         <Text style={styles.subtitle}>
-          {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+          {mode === 'signup' ? 'Create your account 🔑' : 'welcome back 👋'}
         </Text>
 
         {mode === 'signup' && (
@@ -172,7 +172,7 @@ export default function AuthScreen() {
         </Pressable>
 
         <Pressable onPress={() => router.back()}>
-          <Text style={styles.skipText}>Skip for now</Text>
+          <Text style={styles.skipText}>nah im good</Text>
         </Pressable>
       </KeyboardAvoidingView>
     </SafeAreaView>

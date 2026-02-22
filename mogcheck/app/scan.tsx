@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -21,7 +22,8 @@ import { useScanStore } from '../lib/store/useScanStore';
 import { useUserStore } from '../lib/store/useUserStore';
 import { mapMLKitToFacialPoints, medianFacialPoints, validateFacialPoints } from '../lib/analysis/landmarkMapper';
 import { analyzeface } from '../lib/analysis/scoreEngine';
-import { preloadInterstitial, showInterstitial } from '../lib/ads/adManager';
+import { preloadInterstitial, showInterstitial, preloadRewarded } from '../lib/ads/adManager';
+import { useScreenShake } from '../lib/hooks/useScreenShake';
 
 /** Directory to persist scan photos so they survive temp cleanup */
 const SCAN_PHOTOS_DIR = `${FileSystem.documentDirectory}scan-photos/`;
@@ -43,6 +45,8 @@ const DETECTED_TEXTS = [
   'locking onto ur canthal tilt rn',
 ];
 const ANALYZING_TEXTS = [
+  'the algorithm is COOKING rn... 🔥',
+  'hold on this is gonna be brutal... 💀',
   'calculating mog potential...',
   'measuring ur orbital rim rn...',
   'consulting the golden ratio gods...',
@@ -76,7 +80,12 @@ export default function ScanScreen() {
   const faceBufferRef = useRef<Face[]>([]);
   const analyzingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const FACE_BUFFER_SIZE = 8;
+  const FACE_BUFFER_SIZE = 15;
+  const { shakeX, triggerShake } = useScreenShake();
+
+  const captureShakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
 
   // Face detection via frame processor (no Skia dependency)
   const { detectFaces } = useFaceDetector({
@@ -129,8 +138,9 @@ export default function ScanScreen() {
       requestPermission();
     }
     startScan();
-    // Pre-load interstitial ad so it's ready when scan completes
+    // Pre-load ads so they're ready
     preloadInterstitial();
+    preloadRewarded();
     return () => {
       reset();
       if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
@@ -157,6 +167,7 @@ export default function ScanScreen() {
 
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      triggerShake();
 
       // Take photo and persist to document directory (temp files get cleaned up by iOS)
       const photo = await cameraRef.current.takePhoto();
@@ -284,7 +295,7 @@ export default function ScanScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, captureShakeStyle]}>
       {/* Camera with face detection frame processor */}
       <Camera
         ref={cameraRef}
@@ -368,7 +379,7 @@ export default function ScanScreen() {
           />
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 

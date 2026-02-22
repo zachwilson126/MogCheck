@@ -10,7 +10,9 @@ import Animated, {
   FadeIn,
   ZoomIn,
 } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { colors, tierColors } from '../../lib/constants/theme';
+import { useScreenShake } from '../../lib/hooks/useScreenShake';
 
 interface BattleResultProps {
   winnerName: string;
@@ -33,6 +35,7 @@ export function BattleResult({
 }: BattleResultProps) {
   const stampScale = useSharedValue(0);
   const stampRotation = useSharedValue(-15);
+  const { shakeX, triggerShake } = useScreenShake();
 
   useEffect(() => {
     stampScale.value = withDelay(
@@ -49,6 +52,14 @@ export function BattleResult({
         withSpring(-8, { damping: 6 }),
       ),
     );
+
+    // Screen shake + haptic when stamp appears
+    const timer = setTimeout(() => {
+      triggerShake();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }, 600);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const stampStyle = useAnimatedStyle(() => ({
@@ -58,11 +69,15 @@ export function BattleResult({
     ],
   }));
 
+  const containerShakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
   const winnerColor = tierColors[winnerTier] ?? colors.primary;
   const mogText = scoreDiff >= 2 ? 'GIGAMOGGED' : scoreDiff >= 1 ? 'MOGGED' : 'EDGED OUT';
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, containerShakeStyle]}>
       {/* Winner side */}
       <Animated.View entering={FadeIn.delay(200).duration(500)} style={styles.winnerCard}>
         <Text style={styles.crownEmoji}>{'👑'}</Text>
@@ -91,7 +106,7 @@ export function BattleResult({
           {scoreDiff.toFixed(1)} point{scoreDiff >= 2 ? '' : ''} difference
         </Text>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 

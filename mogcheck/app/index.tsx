@@ -40,14 +40,14 @@ export default function HomeScreen() {
       {/* Main Actions */}
       <View style={styles.mainActions}>
         <GlowButton
-          title="SCAN YOUR FACE"
+          title="SCAN YOUR FACE 💀"
           onPress={() => router.push('/scan')}
           size="large"
           pulsing
           style={styles.scanButton}
         />
         <GlowButton
-          title="MOG BATTLE"
+          title="MOG BATTLE ⚔️"
           onPress={() => {
             if (scanHistory.length > 0) {
               router.push(`/battle/${scanHistory[0].id}`);
@@ -64,7 +64,7 @@ export default function HomeScreen() {
 
       {/* Stats Bar */}
       {totalScans > 0 && (
-        <View style={styles.statsBar}>
+        <View style={[styles.statsBar, { borderWidth: 1, borderColor: 'rgba(57,255,20,0.3)', shadowColor: colors.primary, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } }]}>
           <View style={styles.stat}>
             <Text style={styles.statValue}>{totalScans}</Text>
             <Text style={styles.statLabel}>Scans</Text>
@@ -89,7 +89,7 @@ export default function HomeScreen() {
       {/* Recent Scans */}
       <View style={styles.historySection}>
         <View style={styles.historyHeader}>
-          <Text style={styles.sectionTitle}>Recent Scans</Text>
+          <Text style={styles.sectionTitle}>Recent Scans 📊</Text>
           {scanHistory.length > 0 && (
             <Pressable onPress={() => router.push('/history')}>
               <Text style={styles.seeAll}>See All</Text>
@@ -100,8 +100,8 @@ export default function HomeScreen() {
         {scanHistory.length === 0 ? (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="face-recognition" size={48} color={colors.textMuted} />
-            <Text style={styles.emptyText}>No scans yet</Text>
-            <Text style={styles.emptySubtext}>Tap "Scan Your Face" to get started</Text>
+            <Text style={styles.emptyText}>no scans yet 👀</Text>
+            <Text style={styles.emptySubtext}>u haven't been rated yet. scary.</Text>
           </View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
@@ -138,11 +138,11 @@ export default function HomeScreen() {
       <View style={styles.bottomNav}>
         <Pressable style={styles.navItem} onPress={() => router.push('/store')}>
           <MaterialCommunityIcons name="store" size={24} color="#FFD700" />
-          <Text style={styles.navLabel}>Store</Text>
+          <Text style={styles.navLabel}>Store 🪙</Text>
         </Pressable>
         <Pressable style={styles.navItem} onPress={() => router.push('/leaderboard')}>
           <MaterialCommunityIcons name="trophy" size={24} color={colors.chad} />
-          <Text style={styles.navLabel}>Ranks</Text>
+          <Text style={styles.navLabel}>Ranks 🏆</Text>
         </Pressable>
         <Pressable style={styles.navItem} onPress={() => router.push('/history')}>
           <MaterialCommunityIcons name="history" size={24} color={colors.textMuted} />

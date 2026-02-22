@@ -82,7 +82,7 @@ export function VerdictCard({
       <View style={styles.verdictContainer}>
         <View style={styles.verdictHeader}>
           <MaterialCommunityIcons name="robot" size={20} color={colors.primary} />
-          <Text style={styles.verdictTitle}>AI VERDICT</Text>
+          <Text style={styles.verdictTitle}>AI VERDICT 🤖</Text>
         </View>
         <Text style={styles.verdictText}>{verdict}</Text>
       </View>
@@ -91,7 +91,7 @@ export function VerdictCard({
 
   return (
     <View style={styles.ctaCard}>
-      <Text style={styles.ctaTitle}>AI VERDICT</Text>
+      <Text style={styles.ctaTitle}>AI VERDICT 🤖</Text>
       <Text style={styles.ctaDescription}>Get a brutally honest battle commentary</Text>
       <GlowButton
         title={loading ? 'Judging...' : 'Get Verdict (1 coin)'}
