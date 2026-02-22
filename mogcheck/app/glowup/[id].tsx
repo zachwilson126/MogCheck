@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors } from '../../lib/constants/theme';
 import { useUserStore } from '../../lib/store/useUserStore';
 import { generateTransform } from '../../lib/api/supabase';
@@ -77,12 +78,23 @@ export default function GlowUpScreen() {
       return;
     }
 
+    // Verify photo file actually exists on disk (temp files get cleaned by iOS)
+    const fileInfo = await FileSystem.getInfoAsync(photoUri);
+    if (!fileInfo.exists) {
+      Alert.alert(
+        'Photo Expired',
+        'The photo file has been cleaned up by the system. Please do a new scan to use Glow Up.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
       // Spend coins locally first
-      const spent = await spendCoins(COIN_COST, 'transform', scan.id);
+      const spent = await spendCoins(COIN_COST, 'transform');
       if (!spent) {
         setError('Failed to spend coins. Please try again.');
         setLoading(false);

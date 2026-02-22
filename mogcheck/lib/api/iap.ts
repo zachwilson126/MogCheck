@@ -33,7 +33,7 @@ export async function initIAP(): Promise<boolean> {
     setupPurchaseListeners();
     return true;
   } catch (err) {
-    console.warn('IAP init failed:', err);
+    if (__DEV__) console.warn('IAP init failed:', err);
     return false;
   }
 }
@@ -55,7 +55,7 @@ export async function loadProducts(): Promise<Product[]> {
     const products = await fetchProducts({ skus: ALL_PRODUCT_IDS });
     return (products ?? []) as Product[];
   } catch (err) {
-    console.warn('Failed to load products:', err);
+    if (__DEV__) console.warn('Failed to load products:', err);
     return [];
   }
 }
@@ -70,7 +70,7 @@ export async function purchaseCoinPack(productId: string): Promise<void> {
       type: 'in-app',
     });
   } catch (err) {
-    console.warn('Purchase failed:', err);
+    if (__DEV__) console.warn('Purchase failed:', err);
     throw err;
   }
 }
@@ -115,6 +115,6 @@ function setupPurchaseListeners() {
   });
 
   purchaseErrorSubscription = purchaseErrorListener((error: PurchaseError) => {
-    console.warn('Purchase error:', error.message);
+    if (__DEV__) console.warn('Purchase error:', error.message);
   });
 }

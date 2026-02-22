@@ -32,7 +32,7 @@ export async function shareResults(viewShotRef: React.RefObject<ViewShot | null>
       });
     }
   } catch (error) {
-    console.error('Share failed:', error);
+    if (__DEV__) console.error('Share failed:', error);
   }
 }
 

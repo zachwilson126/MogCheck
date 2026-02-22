@@ -22,8 +22,7 @@
         "NSCameraUsageDescription": "MogCheck needs camera access to scan and analyze your facial proportions.",
         "NSPhotoLibraryUsageDescription": "MogCheck needs photo library access so you can upload existing photos for analysis.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "associatedDomains": []
+      }
     },
     "plugins": [
       "expo-router",
@@ -44,6 +43,12 @@
             "./assets/fonts/PlusJakartaSans-SemiBold.ttf",
             "./assets/fonts/PlusJakartaSans-Bold.ttf"
           ]
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
         }
       ]
     ],

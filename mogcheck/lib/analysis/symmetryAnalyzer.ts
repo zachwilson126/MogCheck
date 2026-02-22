@@ -48,7 +48,14 @@ function pairSymmetry(left: Point, right: Point, midX: number, faceWidth: number
  */
 export function analyzeSymmetry(points: FacialPoints): SymmetryResult {
   const midX = (points.leftCheek.x + points.rightCheek.x) / 2;
-  const faceWidth = dist(points.leftCheek, points.rightCheek);
+  const faceWidth = Math.abs(points.rightCheek.x - points.leftCheek.x);
+
+  // Guard: if cheeks are too close, use the Euclidean distance as fallback
+  const effectiveWidth = faceWidth > 10 ? faceWidth : dist(points.leftCheek, points.rightCheek);
+
+  if (effectiveWidth <= 0) {
+    return { percentage: 75, score: 0.75, pairDeviations: [] };
+  }
 
   const pairs: { name: string; left: Point; right: Point }[] = [
     { name: 'Eyes', left: points.leftEyeCenter, right: points.rightEyeCenter },
@@ -59,29 +66,41 @@ export function analyzeSymmetry(points: FacialPoints): SymmetryResult {
     { name: 'Nose Alar', left: points.leftNoseAlar, right: points.rightNoseAlar },
     { name: 'Mouth Corner', left: points.mouthLeft, right: points.mouthRight },
     { name: 'Jaw', left: points.leftJaw, right: points.rightJaw },
-    { name: 'Cheek', left: points.leftCheek, right: points.rightCheek },
   ];
-
-  // Also compare contour point distributions
-  const contourDeviation = calculateContourSymmetry(points.leftContour, points.rightContour, midX, faceWidth);
 
   const pairDeviations: PairDeviation[] = pairs.map(({ name, left, right }) => ({
     name,
-    deviation: pairSymmetry(left, right, midX, faceWidth),
+    // Cap individual deviations to prevent one outlier from tanking the score
+    deviation: Math.min(0.3, pairSymmetry(left, right, midX, effectiveWidth)),
   }));
 
-  // Add contour symmetry as a pair
-  pairDeviations.push({ name: 'Contour', deviation: contourDeviation });
+  // Contour symmetry is noisier — include it at reduced weight
+  const contourDeviation = calculateContourSymmetry(points.leftContour, points.rightContour, midX, effectiveWidth);
+  pairDeviations.push({ name: 'Contour', deviation: Math.min(0.2, contourDeviation) });
 
-  // Average deviation across all pairs
-  const avgDeviation = pairDeviations.reduce((sum, p) => sum + p.deviation, 0) / pairDeviations.length;
+  // Weighted average: landmark pairs count 2x, contour counts 1x
+  const landmarkSum = pairDeviations.slice(0, -1).reduce((sum, p) => sum + p.deviation, 0);
+  const landmarkCount = pairDeviations.length - 1;
+  const avgDeviation = landmarkCount > 0
+    ? (landmarkSum * 2 + contourDeviation) / (landmarkCount * 2 + 1)
+    : contourDeviation;
 
-  // Convert to percentage (0 deviation = 100%, scale so typical faces score 70-90%)
-  // A deviation of 0.05 (5% of face width) = ~75% symmetry
-  const percentage = Math.max(0, Math.min(100, (1 - avgDeviation * 5) * 100));
+  // Convert to percentage — use multiplier of 2.5 so typical faces land 70-95%
+  // 0.02 (2%) deviation → 95%  |  0.06 (6%) → 85%  |  0.12 (12%) → 70%
+  const percentage = Math.max(0, Math.min(100, (1 - avgDeviation * 2.5) * 100));
 
   // Score for weighted calculation (0-1)
   const score = percentage / 100;
+
+  if (__DEV__) {
+    console.log('[MogCheck] Symmetry:', {
+      midX: midX.toFixed(1),
+      faceWidth: effectiveWidth.toFixed(1),
+      avgDeviation: avgDeviation.toFixed(4),
+      percentage: percentage.toFixed(1),
+      pairs: pairDeviations.map(p => `${p.name}: ${(p.deviation * 100).toFixed(1)}%`),
+    });
+  }
 
   return { percentage, score, pairDeviations };
 }

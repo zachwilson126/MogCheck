@@ -77,10 +77,7 @@ export default function StoreScreen() {
             <Text style={styles.costItem}>Ascension Plan</Text>
             <Text style={styles.costValue}>{FEATURE_COSTS.ascension_plan} coins</Text>
           </View>
-          <View style={styles.costRow}>
-            <Text style={styles.costItem}>AI Glow Up</Text>
-            <Text style={styles.costValue}>{FEATURE_COSTS.glow_up} coins</Text>
-          </View>
+          {/* Glow Up — coming in v1.1 */}
         </View>
 
         {/* Coin Packs */}

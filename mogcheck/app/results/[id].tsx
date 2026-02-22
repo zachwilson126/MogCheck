@@ -14,6 +14,7 @@ import { GlowButton } from '../../components/shared/GlowButton';
 import { CoinBalance } from '../../components/store/CoinBalance';
 import { ShareCardContent, shareResults } from '../../lib/utils/shareCard';
 import { AscensionPlan } from '../../components/results/AscensionPlan';
+import { AdBanner } from '../../components/shared/AdBanner';
 
 export default function ResultsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -91,23 +92,6 @@ export default function ResultsScreen() {
           </View>
         </View>
 
-        {/* Facial Thirds */}
-        <View style={styles.thirdsCard}>
-          <Text style={styles.sectionTitle}>Facial Thirds</Text>
-          <View style={styles.thirdsBar}>
-            <View style={[styles.thirdSegment, { flex: analysis.facialThirds.upper, backgroundColor: '#60A5FA' }]}>
-              <Text style={styles.thirdLabel}>Upper {analysis.facialThirds.upper}%</Text>
-            </View>
-            <View style={[styles.thirdSegment, { flex: analysis.facialThirds.middle, backgroundColor: '#A855F7' }]}>
-              <Text style={styles.thirdLabel}>Mid {analysis.facialThirds.middle}%</Text>
-            </View>
-            <View style={[styles.thirdSegment, { flex: analysis.facialThirds.lower, backgroundColor: '#F59E0B' }]}>
-              <Text style={styles.thirdLabel}>Lower {analysis.facialThirds.lower}%</Text>
-            </View>
-          </View>
-          <Text style={styles.thirdsIdeal}>Ideal: 33% / 33% / 33%</Text>
-        </View>
-
         {/* Ratio Breakdown (Radar + Bars) */}
         <RatioBreakdown ratios={analysis.ratios} tierColor={tierColor} />
 
@@ -123,13 +107,6 @@ export default function ResultsScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          <GlowButton
-            title="Glow Up (5 coins)"
-            onPress={() => router.push(`/glowup/${scan.id}`)}
-            variant="outline"
-            size="medium"
-            color={tierColor}
-          />
           <GlowButton
             title="Mog Battle"
             onPress={() => router.push(`/battle/${scan.id}`)}
@@ -147,7 +124,12 @@ export default function ResultsScreen() {
 
         <DisclaimerBanner text="Scores are based on mathematical ratios and do not represent actual attractiveness or human value. For entertainment purposes only." />
 
-        <View style={{ height: 40 }} />
+        {/* Banner Ad */}
+        <View style={{ marginTop: 16, marginBottom: 8 }}>
+          <AdBanner />
+        </View>
+
+        <View style={{ height: 20 }} />
       </ScrollView>
 
       {/* Hidden share card for capture */}
@@ -253,42 +235,6 @@ const styles = StyleSheet.create({
   featureScore: {
     fontFamily: 'BebasNeue_400Regular',
     fontSize: 28,
-  },
-  thirdsCard: {
-    backgroundColor: colors.surface,
-    marginHorizontal: 16,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  thirdsBar: {
-    flexDirection: 'row',
-    height: 32,
-    borderRadius: 8,
-    overflow: 'hidden',
-    gap: 2,
-  },
-  thirdSegment: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  thirdLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 10,
-    color: 'rgba(0,0,0,0.7)',
-  },
-  thirdsIdeal: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 11,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: 8,
   },
   actions: {
     paddingHorizontal: 16,

@@ -23,37 +23,53 @@ function dist(a: Point, b: Point): number {
 }
 
 /**
+ * Get robust face width using cheeks as primary, with fallbacks to
+ * jaw width or eye outer corners if cheeks are too close together.
+ */
+function getFaceWidth(points: FacialPoints): number {
+  const cheekWidth = dist(points.leftCheek, points.rightCheek);
+  if (cheekWidth > 10) return cheekWidth;
+
+  // Fallback 1: jaw width (typically ~75-80% of face width)
+  const jawWidth = dist(points.leftJaw, points.rightJaw);
+  if (jawWidth > 10) return jawWidth / 0.775;
+
+  // Fallback 2: outer eye corners (typically ~70% of face width)
+  const eyeWidth = dist(points.leftEyeOuter, points.rightEyeOuter);
+  if (eyeWidth > 5) return eyeWidth / 0.7;
+
+  return 0;
+}
+
+/**
+ * Get robust face length using hairline-to-chin as primary, with fallback
+ * to browCenter-to-chin extrapolated (upper third ≈ middle third).
+ */
+function getFaceLength(points: FacialPoints): number {
+  const fullLength = dist(points.hairline, points.chin);
+  if (fullLength > 10) return fullLength;
+
+  // Fallback: browCenter-to-chin covers ~2/3 of face length
+  const browToChin = dist(points.browCenter, points.chin);
+  if (browToChin > 5) return browToChin * 1.5;
+
+  return 0;
+}
+
+/**
  * Calculate the measured value for each defined ratio.
  */
 function measureRatio(def: RatioDefinition, points: FacialPoints): number {
   switch (def.id) {
     case 'face_length_width': {
-      const faceLength = dist(points.hairline, points.chin);
-      const faceWidth = dist(points.leftCheek, points.rightCheek);
+      const faceLength = getFaceLength(points);
+      const faceWidth = getFaceWidth(points);
       return faceWidth > 0 ? faceLength / faceWidth : 0;
-    }
-
-    case 'facial_thirds': {
-      const upper = dist(points.hairline, points.browCenter);
-      const middle = dist(points.browCenter, points.noseBase);
-      const lower = dist(points.noseBase, points.chin);
-      const total = upper + middle + lower;
-      if (total === 0) return 0;
-      // Measure how close to equal thirds (1:1:1)
-      // Perfect = each third is exactly 1/3 of total
-      const idealThird = total / 3;
-      const maxDev = Math.max(
-        Math.abs(upper - idealThird),
-        Math.abs(middle - idealThird),
-        Math.abs(lower - idealThird),
-      );
-      // Return 1 - normalized deviation (1.0 = perfect equal thirds)
-      return 1.0 - (maxDev / idealThird);
     }
 
     case 'eye_spacing': {
       const ipd = dist(points.leftEyeCenter, points.rightEyeCenter);
-      const faceWidth = dist(points.leftCheek, points.rightCheek);
+      const faceWidth = getFaceWidth(points);
       return faceWidth > 0 ? ipd / faceWidth : 0;
     }
 
@@ -65,13 +81,13 @@ function measureRatio(def: RatioDefinition, points: FacialPoints): number {
 
     case 'jaw_face_width': {
       const jawWidth = dist(points.leftJaw, points.rightJaw);
-      const faceWidth = dist(points.leftCheek, points.rightCheek);
+      const faceWidth = getFaceWidth(points);
       return faceWidth > 0 ? jawWidth / faceWidth : 0;
     }
 
     case 'nose_face_length': {
       const noseLength = dist(points.nasion, points.noseBase);
-      const faceLength = dist(points.hairline, points.chin);
+      const faceLength = getFaceLength(points);
       return faceLength > 0 ? noseLength / faceLength : 0;
     }
 
@@ -118,10 +134,28 @@ function deviationToScore(deviation: number): number {
 
 /**
  * Calculate all facial ratios from landmark points.
+ * If a measurement returns 0 (bad data), assign a neutral score (0.5)
+ * instead of 0, so one bad measurement doesn't tank the entire score.
  */
 export function calculateRatios(points: FacialPoints): RatioResult[] {
   return RATIO_DEFINITIONS.map((def) => {
     const measured = measureRatio(def, points);
+
+    // Guard: if measurement is 0 or negative, data is bad — assign neutral score
+    if (measured <= 0) {
+      return {
+        id: def.id,
+        name: def.name,
+        description: def.description,
+        measured,
+        ideal: def.ideal,
+        deviation: 0,
+        score: 0.5, // Neutral — don't penalize or reward
+        weight: def.weight,
+        category: def.category,
+      };
+    }
+
     const deviation = calculateDeviation(measured, def);
     const score = deviationToScore(deviation);
 

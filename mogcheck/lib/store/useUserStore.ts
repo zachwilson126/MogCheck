@@ -99,7 +99,7 @@ export const useUserStore = create<UserState>()(
             });
           }
         } catch (err) {
-          console.warn('Sync failed:', err);
+          if (__DEV__) console.warn('Sync failed:', err);
         } finally {
           set({ isSyncing: false });
         }
@@ -110,29 +110,34 @@ export const useUserStore = create<UserState>()(
       })),
 
       /**
-       * Spend coins — deducts locally immediately for responsiveness,
-       * then logs to server. If server deduction fails, we revert.
+       * Spend coins — deducts locally immediately for responsiveness.
+       * Server-side logging is fire-and-forget; edge functions handle
+       * their own coin validation so we don't block on logging failures.
        */
       spendCoins: async (amount, type, referenceId) => {
         const { coins, user, isAuthenticated } = get();
         if (coins < amount) return false;
 
-        // Optimistic local deduction
+        // Local deduction
         set({ coins: coins - amount });
 
-        // Server-side logging (if authenticated)
+        // Server-side logging (fire-and-forget, non-blocking)
         if (isAuthenticated && user) {
-          const { error } = await logCoinTransaction(user.id, -amount, type, referenceId);
-          if (error) {
-            // Revert on failure
-            set({ coins: coins });
-            return false;
-          }
-          // Also update server profile coin balance
-          await supabase
+          logCoinTransaction(user.id, -amount, type, referenceId)
+            .then(({ error }) => {
+              if (error) {
+                if (__DEV__) console.warn('Coin log failed (non-blocking):', error.message, { type, amount });
+              }
+            })
+            .catch((err) => { if (__DEV__) console.warn('Coin log error:', err); });
+
+          supabase
             .from('profiles')
             .update({ coins: coins - amount })
-            .eq('id', user.id);
+            .eq('id', user.id)
+            .then(({ error }) => {
+              if (error && __DEV__) console.warn('Profile coin update failed:', error.message);
+            });
         }
 
         return true;
@@ -165,7 +170,7 @@ export const useUserStore = create<UserState>()(
             ratioData: Object.fromEntries(
               analysis.ratios.map((r) => [r.id, { measured: r.measured, score: r.score }]),
             ),
-          }).catch((err) => console.warn('Server scan save failed:', err));
+          }).catch((err) => { if (__DEV__) console.warn('Server scan save failed:', err); });
 
           // Update profile stats on server
           supabase
@@ -177,7 +182,7 @@ export const useUserStore = create<UserState>()(
             })
             .eq('id', user.id)
             .then(({ error }) => {
-              if (error) console.warn('Profile update failed:', error.message);
+              if (error && __DEV__) console.warn('Profile update failed:', error.message);
             });
         }
 
@@ -188,19 +193,20 @@ export const useUserStore = create<UserState>()(
 
       setUsername: (username) => set({ username }),
 
-      reset: () => set({
+      reset: () => set((state) => ({
         user: null,
         session: null,
         isAuthenticated: false,
         coins: 3,
-        totalScans: 0,
-        highestScore: 0,
-        currentTier: null,
+        totalScans: state.totalScans,
+        highestScore: state.highestScore,
+        currentTier: state.currentTier,
         username: null,
-        scanHistory: [],
-        disclaimerAccepted: false,
+        // Preserve local data across logout
+        scanHistory: state.scanHistory,
+        disclaimerAccepted: state.disclaimerAccepted,
         isSyncing: false,
-      }),
+      })),
     }),
     {
       name: 'mogcheck-user-store',

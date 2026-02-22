@@ -12,14 +12,19 @@ import { useFaceDetector } from 'react-native-vision-camera-face-detector/src/Fa
 import type { Face } from 'react-native-vision-camera-face-detector/src/FaceDetector';
 import { Worklets, useSharedValue } from 'react-native-worklets-core';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors } from '../lib/constants/theme';
 import { FaceGuide } from '../components/camera/FaceGuide';
 import { ScanAnimation } from '../components/camera/ScanAnimation';
 import { GlowButton } from '../components/shared/GlowButton';
 import { useScanStore } from '../lib/store/useScanStore';
 import { useUserStore } from '../lib/store/useUserStore';
-import { mapMLKitToFacialPoints } from '../lib/analysis/landmarkMapper';
+import { mapMLKitToFacialPoints, medianFacialPoints, validateFacialPoints } from '../lib/analysis/landmarkMapper';
 import { analyzeface } from '../lib/analysis/scoreEngine';
+import { preloadInterstitial, showInterstitial } from '../lib/ads/adManager';
+
+/** Directory to persist scan photos so they survive temp cleanup */
+const SCAN_PHOTOS_DIR = `${FileSystem.documentDirectory}scan-photos/`;
 
 // Rotating meme text for each scan phase
 const IDLE_TEXTS = [
@@ -68,7 +73,10 @@ export default function ScanScreen() {
   const [capturing, setCapturing] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const lastFaceRef = useRef<Face | null>(null);
+  const faceBufferRef = useRef<Face[]>([]);
   const analyzingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const FACE_BUFFER_SIZE = 8;
 
   // Face detection via frame processor (no Skia dependency)
   const { detectFaces } = useFaceDetector({
@@ -85,10 +93,16 @@ export default function ScanScreen() {
 
     if (faces.length > 0) {
       lastFaceRef.current = faces[0];
+      // Buffer last N face detections for averaging on capture
+      faceBufferRef.current.push(faces[0]);
+      if (faceBufferRef.current.length > FACE_BUFFER_SIZE) {
+        faceBufferRef.current.shift();
+      }
       setFaceDetected(true);
       setFeedbackText(pick(DETECTED_TEXTS));
     } else {
       lastFaceRef.current = null;
+      faceBufferRef.current = [];
       setFaceDetected(false);
       setFeedbackText(pick(IDLE_TEXTS));
     }
@@ -115,6 +129,8 @@ export default function ScanScreen() {
       requestPermission();
     }
     startScan();
+    // Pre-load interstitial ad so it's ready when scan completes
+    preloadInterstitial();
     return () => {
       reset();
       if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
@@ -142,22 +158,50 @@ export default function ScanScreen() {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-      // Take photo
+      // Take photo and persist to document directory (temp files get cleaned up by iOS)
       const photo = await cameraRef.current.takePhoto();
-      const photoUri = `file://${photo.path}`;
+      const tempUri = `file://${photo.path}`;
 
-      console.log('[MogCheck] Photo captured:', photo.width, 'x', photo.height);
-      console.log('[MogCheck] Face data - bounds:', JSON.stringify(faceData.bounds));
-      console.log('[MogCheck] Has landmarks:', !!faceData.landmarks);
-      console.log('[MogCheck] Has contours:', !!faceData.contours);
+      // Ensure scan-photos directory exists, then copy
+      await FileSystem.makeDirectoryAsync(SCAN_PHOTOS_DIR, { intermediates: true }).catch(() => {});
+      const persistedPath = `${SCAN_PHOTOS_DIR}${Date.now()}.jpg`;
+      await FileSystem.copyAsync({ from: tempUri, to: persistedPath });
+      const photoUri = persistedPath;
 
-      // Map face data from live preview to our facial points
-      const points = mapMLKitToFacialPoints(faceData as any);
-      if (!points) {
-        if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
-        setError('bro we literally cannot find ur face rn. try better lighting fr.');
-        setCapturing(false);
-        return;
+      if (__DEV__) {
+        console.log('[MogCheck] Photo captured:', photo.width, 'x', photo.height);
+        console.log('[MogCheck] Face data - bounds:', JSON.stringify(faceData.bounds));
+        console.log('[MogCheck] Has landmarks:', !!faceData.landmarks);
+        console.log('[MogCheck] Has contours:', !!faceData.contours);
+      }
+
+      // Map all buffered face frames to facial points, validate each,
+      // then use median selection to reject outlier frames.
+      // Median is robust to single bad frames unlike averaging.
+      const bufferedFaces = faceBufferRef.current.length > 0
+        ? faceBufferRef.current
+        : [faceData];
+      const allPoints = bufferedFaces
+        .map(f => mapMLKitToFacialPoints(f as any))
+        .filter((p): p is NonNullable<typeof p> => p !== null)
+        .filter(p => validateFacialPoints(p));
+
+      if (allPoints.length === 0) {
+        // If all buffered frames failed validation, try the latest single frame
+        const fallback = mapMLKitToFacialPoints(faceData as any);
+        if (!fallback) {
+          if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
+          setError('bro we literally cannot find ur face rn. try better lighting fr.');
+          setCapturing(false);
+          return;
+        }
+        allPoints.push(fallback);
+      }
+
+      const points = medianFacialPoints(allPoints);
+
+      if (__DEV__) {
+        console.log(`[MogCheck] Used median of ${allPoints.length} valid frames for analysis`);
       }
 
       if (__DEV__) {
@@ -195,6 +239,9 @@ export default function ScanScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      // Show interstitial ad before results (waits for close or skips if not loaded)
+      await showInterstitial();
+
       // Navigate to results
       const scanHistory = useUserStore.getState().scanHistory;
       const latestScan = scanHistory[0];
@@ -202,7 +249,7 @@ export default function ScanScreen() {
         router.replace(`/results/${latestScan.id}`);
       }
     } catch (err) {
-      console.error('[MogCheck] Scan error:', err);
+      if (__DEV__) console.error('[MogCheck] Scan error:', err);
       if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
       setError('the algorithm broke. even AI gave up on u. try again.');
     } finally {

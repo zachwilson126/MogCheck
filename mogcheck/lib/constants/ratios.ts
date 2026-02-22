@@ -32,20 +32,12 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     category: 'primary',
   },
   {
-    id: 'facial_thirds',
-    name: 'Facial Thirds',
-    description: 'Upper:Middle:Lower face proportion balance',
-    ideal: 1.0,
-    weight: 0.20,
-    category: 'primary',
-  },
-  {
     id: 'eye_spacing',
     name: 'Eye Spacing',
     description: 'Inter-pupillary distance ÷ face width',
     ideal: 0.45,
-    idealRange: [0.44, 0.46],
-    weight: 0.13,
+    idealRange: [0.42, 0.48],
+    weight: 0.18,
     category: 'primary',
   },
   {
@@ -53,7 +45,7 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     name: 'Nose:Mouth Width',
     description: 'Alar width ÷ mouth width',
     ideal: INV_PHI,
-    weight: 0.11,
+    weight: 0.16,
     category: 'primary',
   },
   {
@@ -61,8 +53,8 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     name: 'Jaw:Face Width',
     description: 'Gonial width ÷ bizygomatic width',
     ideal: 0.775,
-    idealRange: [0.75, 0.80],
-    weight: 0.14,
+    idealRange: [0.72, 0.83],
+    weight: 0.18,
     category: 'primary',
   },
 
@@ -72,8 +64,8 @@ export const RATIO_DEFINITIONS: RatioDefinition[] = [
     name: 'Nose:Face Length',
     description: 'Nasion-to-subnasale ÷ trichion-to-menton',
     ideal: 0.315,
-    idealRange: [0.30, 0.33],
-    weight: 0.07,
+    idealRange: [0.28, 0.35],
+    weight: 0.13,
     category: 'secondary',
   },
 ];
@@ -84,6 +76,6 @@ export const SYMMETRY_WEIGHT = 0.15;
 // Verify weights sum to 1.0
 const ratioWeightSum = RATIO_DEFINITIONS.reduce((sum, r) => sum + r.weight, 0);
 const totalWeight = ratioWeightSum + SYMMETRY_WEIGHT;
-if (Math.abs(totalWeight - 1.0) > 0.001) {
+if (__DEV__ && Math.abs(totalWeight - 1.0) > 0.001) {
   console.warn(`Ratio weights sum to ${totalWeight}, expected 1.0`);
 }

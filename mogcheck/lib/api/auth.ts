@@ -14,6 +14,7 @@ export interface AuthState {
 /**
  * Sign up with email and password.
  * Creates a profile row via a Supabase trigger (or manually).
+ * Returns `needsConfirmation: true` when email verification is required.
  */
 export async function signUp(email: string, password: string, username?: string) {
   const { data, error } = await supabase.auth.signUp({
@@ -24,7 +25,7 @@ export async function signUp(email: string, password: string, username?: string)
     },
   });
 
-  if (error) return { user: null, error: error.message };
+  if (error) return { user: null, needsConfirmation: false, error: error.message };
 
   // Create profile if sign-up succeeded
   if (data.user) {
@@ -35,15 +36,19 @@ export async function signUp(email: string, password: string, username?: string)
     });
 
     if (profileError && !profileError.message.includes('duplicate')) {
-      console.warn('Profile creation error:', profileError.message);
+      if (__DEV__) console.warn('Profile creation error:', profileError.message);
     }
   }
 
-  return { user: data.user, error: null };
+  // If Supabase returned a user but no session, email confirmation is required
+  const needsConfirmation = !!data.user && !data.session;
+
+  return { user: data.user, needsConfirmation, error: null };
 }
 
 /**
  * Sign in with email and password.
+ * Provides user-friendly error messages for common Supabase auth failures.
  */
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -51,9 +56,29 @@ export async function signIn(email: string, password: string) {
     password,
   });
 
-  if (error) return { user: null, session: null, error: error.message };
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('email not confirmed')) {
+      return { user: null, session: null, error: 'email_not_confirmed' };
+    }
+    if (msg.includes('invalid login credentials')) {
+      return { user: null, session: null, error: 'Wrong email or password.' };
+    }
+    return { user: null, session: null, error: error.message };
+  }
 
   return { user: data.user, session: data.session, error: null };
+}
+
+/**
+ * Resend the confirmation email for a given address.
+ */
+export async function resendConfirmationEmail(email: string) {
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+  });
+  return { error: error?.message ?? null };
 }
 
 /**

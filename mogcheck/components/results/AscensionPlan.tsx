@@ -31,25 +31,70 @@ const PLAN_CATEGORIES: { key: keyof PlanData; icon: string; title: string }[] = 
   { key: 'style', icon: 'tshirt-crew', title: 'Style' },
 ];
 
-// Placeholder plans for when API isn't connected
-const PLACEHOLDER_PLANS: Record<string, PlanData> = {
-  default: {
+// Multiple placeholder plan sets — rotates each time user spends coins
+const PLACEHOLDER_PLANS: PlanData[] = [
+  {
     mewing_jaw: "Mewing is free and undefeated. Tongue on the roof of your mouth, lips sealed, teeth lightly touching. Do this 24/7 — not just when you remember. Your jaw-to-face ratio will thank you in 6 months. Also, chew mastic gum for jaw gains. You're welcome.",
     skin: "SPF 50 every single day, even when it's cloudy. Cleanser, moisturizer, SPF — that's the holy trinity. Your face is your moneymaker now, treat it like a high-performance vehicle. Retinol at night if you're 20+. Drink water like your tier depends on it (it does).",
     hair: "Your face shape ratios suggest a style with more volume on top and tapered sides would optimize your proportions. Find a barber who actually consults, not just buzzes. A fresh fade every 2-3 weeks is non-negotiable. Hair is the easiest stat to max out.",
     fitness: "Posture is the free cheat code nobody uses. Shoulders back, chin slightly tucked, neck elongated. Do neck curls and extensions — a thick neck literally changes your face-to-neck ratio. Body composition matters too: lean physique = more defined facial features.",
     style: "Grooming is the multiplier. Clean nails, shaped brows (subtle — don't go full Instagram), well-fitted clothes. Wear colors that contrast with your skin tone. Cologne that's not Axe body spray. These are low-effort, high-impact moves.",
   },
-};
+  {
+    mewing_jaw: "Hard mewing is a myth that'll wreck your TMJ. Stick to soft mewing: gentle suction hold, posterior third of tongue pressed up. Consistency > intensity. For masseter gains, try falim gum — harder than mastic, cheaper too. 30 min/day, alternating sides.",
+    skin: "Double cleansing at night is the play. Oil cleanser first to break down sunscreen and grime, then a gentle water-based cleanser. Niacinamide serum for pores, hyaluronic acid for hydration. Your moisture barrier is your best friend — stop stripping it with harsh products.",
+    hair: "Cold water rinse at the end of your shower — closes the cuticle and adds shine. If you're thinning, minoxidil 5% foam is clinically proven. No shame in it, half your favorite celebs use it. Also: biotin supplements are mostly cope, save your money.",
+    fitness: "Face pulls and rear delt work fix forward head posture, which literally changes your profile. 3 sets of face pulls every workout. Chin tucks against a wall — 3x10 daily. Your side profile mog potential is being wasted by nerd neck.",
+    style: "Accessorize strategically. A quality watch and simple chain draw attention to your best features. Avoid oversized clothing — it hides your frame. Slim-fit (not skinny) is the move. Monochrome outfits make you look taller and more put together.",
+  },
+  {
+    mewing_jaw: "Jawline exercises are 90% genetics, 10% effort — but that 10% matters. Chin tucks strengthen the submental area (goodbye double chin). Try the 'clench and release' method: bite down firmly for 5 seconds, release for 5. 3 sets of 20, twice daily. Pair with mewing for max jaw definition.",
+    skin: "Tretinoin is the gold standard — it's prescription retinol on steroids. Start at 0.025% every third night, work up slowly. Your skin will purge for 4-6 weeks, then you ascend. Also: change your pillowcase twice a week. Your face is marinating in bacteria every night.",
+    hair: "Scalp health = hair health. Use a salicylic acid shampoo once a week to clear buildup. Consider a derma roller (1.5mm) on your hairline once a week — stimulates blood flow and growth. Look into rice water rinses — sounds like cope but the protein strengthens strands fr.",
+    fitness: "Intermittent fasting cuts face fat faster than anything else. 16:8 minimum. The leaner you get, the more your bone structure shows. Below 15% body fat is where jaw definition starts. Below 12% is where you become a different person. Cardio is not optional.",
+    style: "Color theory matters more than brands. Find your season (warm/cool/neutral skin undertone) and shop accordingly. Earth tones for warm skin, jewel tones for cool. A $30 shirt in your color beats a $300 one that washes you out. Also: get your clothes tailored. Game changer.",
+  },
+  {
+    mewing_jaw: "Sleep position is the sneaky jaw killer nobody talks about. Sleeping on your side or stomach compresses your face for 8 hours every night. Train yourself to sleep on your back — use a cervical pillow. It preserves symmetry and prevents jaw asymmetry. Mouth tape at night forces nasal breathing and keeps your tongue in mewing position while unconscious.",
+    skin: "Chemical exfoliation > physical scrubs. AHA (glycolic acid) for surface texture, BHA (salicylic acid) for pores and acne. Use one 2-3x a week, never both on the same night. Vitamin C serum in the morning under SPF — it boosts sun protection and fades dark spots. Your future self will thank you.",
+    hair: "Your hair part should follow your cowlick, not fight it. Deep part on your dominant side opens up your face. If your forehead ratio is high, consider curtain bangs or a textured fringe. If it's low, sweep it back. Hair is the easiest way to rebalance facial thirds without surgery.",
+    fitness: "Neck training is the most underrated face hack. Neck curls: lie face up on a bench, hold a plate on your forehead, curl up. 3x15, twice a week. A thick neck makes your jaw look wider relative to your skull. Wrestlers figured this out decades ago. Also: trap development frames your face from below.",
+    style: "Glasses/sunglasses are a face shape optimizer. Round face → angular frames. Long face → aviators. Square jaw → round frames. The right pair literally rebalances your ratios. Invest in one quality pair of sunglasses. UV protection is non-negotiable — squinting causes crow's feet.",
+  },
+  {
+    mewing_jaw: "Myofunctional therapy is mewing's evolved form. Find a myofunctional therapist if you're serious — they fix tongue posture, swallowing patterns, and breathing habits that have been ruining your face since childhood. It's what orthodontists don't want you to know. Also, stop mouth breathing during exercise. Tape your mouth during cardio if you have to.",
+    skin: "Gut health = skin health. Probiotics (fermented foods or supplements) reduce inflammation that shows up as acne and redness. Cut dairy for 30 days and watch what happens to your skin. Not saying forever — just test it. Also: zinc supplements (15-30mg daily) are clinically proven to reduce acne.",
+    hair: "Blow-dry technique matters more than product. Rough dry to 80%, then use a round brush to add volume and direction. Always finish with cool air to set. Use a pre-styler (sea salt spray for texture, volumizing mousse for lift). Your hair should look effortless, which ironically takes effort.",
+    fitness: "Lateral raises and shoulder press create the V-taper that frames your face. Wide shoulders make your face look more proportional. 3-4 sets of lateral raises every other day. Don't neglect cardio though — sub-15% body fat is where facial aesthetics actually show. Your jawline is hiding under face fat.",
+    style: "Scent is the invisible accessory. Find 2-3 fragrances: one fresh for daytime (citrus/aquatic), one warm for evening (woody/amber), one signature. Apply to pulse points — wrists, neck, behind ears. Compliment-getter fragrances exist and they're documented online. This is a real stat boost that most guys ignore.",
+  },
+];
+
+/**
+ * Pick a plan index based on scan score + timestamp so different scans
+ * get different plans, and repeated taps on the same scan cycle through them.
+ */
+function getNextPlanIndex(score: number, tapCount: number): number {
+  // Use score as seed so different scans start at different plans
+  const scoreSeed = Math.floor(score * 100);
+  return (scoreSeed + tapCount) % PLACEHOLDER_PLANS.length;
+}
 
 export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
   const router = useRouter();
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tapCount, setTapCount] = useState(0);
   const coins = useUserStore((s) => s.coins);
   const spendCoins = useUserStore((s) => s.spendCoins);
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
+
+  const selectPlaceholderPlan = () => {
+    const idx = getNextPlanIndex(analysis.score, tapCount);
+    setTapCount((c) => c + 1);
+    return PLACEHOLDER_PLANS[idx];
+  };
 
   const handleGetPlan = async () => {
     setError(null);
@@ -78,7 +123,7 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
         if (result.plan && typeof result.plan === 'object') {
           setPlan(result.plan as unknown as PlanData);
         } else {
-          setPlan(PLACEHOLDER_PLANS.default);
+          setPlan(selectPlaceholderPlan());
         }
       } else {
         const spent = await spendCoins(2, 'ascension');
@@ -88,10 +133,10 @@ export function AscensionPlan({ analysis, tierColor }: AscensionPlanProps) {
           return;
         }
         await new Promise((r) => setTimeout(r, 2000));
-        setPlan(PLACEHOLDER_PLANS.default);
+        setPlan(selectPlaceholderPlan());
       }
     } catch {
-      setPlan(PLACEHOLDER_PLANS.default);
+      setPlan(selectPlaceholderPlan());
     } finally {
       setLoading(false);
     }

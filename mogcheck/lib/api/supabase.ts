@@ -78,17 +78,22 @@ export async function getCoins(userId: string): Promise<number> {
   return data?.coins ?? 0;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function logCoinTransaction(
   userId: string,
   amount: number,
   type: string,
   referenceId?: string,
 ) {
+  // reference_id is a uuid column — only pass valid UUIDs
+  const safeRefId = referenceId && UUID_REGEX.test(referenceId) ? referenceId : null;
+
   const { error } = await supabase.from('coin_transactions').insert({
     user_id: userId,
     amount,
     type,
-    reference_id: referenceId ?? null,
+    reference_id: safeRefId,
   });
   return { error };
 }
@@ -136,8 +141,15 @@ export async function callEdgeFunction<T = unknown>(
   functionName: string,
   body: Record<string, unknown>,
 ): Promise<{ data: T | null; error: string | null }> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
+  // Force refresh to avoid stale JWTs
+  const { data: refreshData } = await supabase.auth.refreshSession();
+  let token = refreshData?.session?.access_token;
+
+  if (!token) {
+    // Fallback to cached session
+    const { data: sessionData } = await supabase.auth.getSession();
+    token = sessionData?.session?.access_token ?? undefined;
+  }
 
   if (!token) {
     return { data: null, error: 'Not authenticated' };
@@ -200,7 +212,7 @@ export async function generateAscensionPlan(analysisData: {
 
 /**
  * Generate a "Glow Up" transformation via the generate-transform edge function.
- * Sends the original photo + analysis as multipart form data.
+ * Uses supabase.functions.invoke which handles JWT auth headers correctly.
  * Returns a base64-encoded transformed image.
  */
 export async function generateTransform(
@@ -212,42 +224,64 @@ export async function generateTransform(
     symmetryScore: number;
   },
 ): Promise<{ transformedImage: string | null; disclaimer: string | null; error: string | null }> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-
-  if (!token) {
-    return { transformedImage: null, disclaimer: null, error: 'Not authenticated. Sign in to use Glow Up.' };
-  }
-
-  const formData = new FormData();
-  formData.append('image', {
-    uri: imageUri,
-    type: 'image/jpeg',
-    name: 'scan.jpg',
-  } as unknown as Blob);
-  formData.append('analysis', JSON.stringify(analysis));
-
   try {
+    // Force token refresh to avoid stale JWTs
+    await supabase.auth.refreshSession();
+    const { data: freshSession } = await supabase.auth.getSession();
+    const token = freshSession?.session?.access_token;
+
+    if (!token) {
+      return { transformedImage: null, disclaimer: null, error: 'Not authenticated. Sign in to use Glow Up.' };
+    }
+
+    const formData = new FormData();
+    formData.append('image', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: 'scan.jpg',
+    } as unknown as Blob);
+    formData.append('analysis', JSON.stringify(analysis));
+
     const response = await fetch(`${supabaseUrl}/functions/v1/generate-transform`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
       },
       body: formData,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Transform failed' }));
-      return { transformedImage: null, disclaimer: null, error: errorData.error ?? 'Transform failed' };
+    const responseText = await response.text();
+
+    if (__DEV__) {
+      console.log('[MogCheck] Transform response:', response.status, responseText.slice(0, 500));
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      let errorMsg = 'Transform failed';
+      try {
+        const parsed = JSON.parse(responseText);
+        errorMsg = parsed.error ?? parsed.message ?? errorMsg;
+      } catch {
+        errorMsg = `Transform failed (${response.status})`;
+      }
+      return { transformedImage: null, disclaimer: null, error: errorMsg };
+    }
+
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return { transformedImage: null, disclaimer: null, error: 'Unexpected server response.' };
+    }
+
     return {
-      transformedImage: data.transformed_image ?? null,
-      disclaimer: data.disclaimer ?? null,
-      error: null,
+      transformedImage: (data.transformed_image as string) ?? null,
+      disclaimer: (data.disclaimer as string) ?? null,
+      error: (data.error as string) ?? null,
     };
-  } catch {
+  } catch (err) {
+    if (__DEV__) console.error('[MogCheck] Transform error:', err);
     return { transformedImage: null, disclaimer: null, error: 'Network error. Please try again.' };
   }
 }

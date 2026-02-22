@@ -110,25 +110,103 @@ function distance(a: Point, b: Point): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
+function medianOf(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+function medianPoint(points: Point[]): Point {
+  return {
+    x: medianOf(points.map(p => p.x)),
+    y: medianOf(points.map(p => p.y)),
+  };
+}
+
+/**
+ * Combine multiple FacialPoints using median (not average) to reject outliers.
+ * A single bad MLKit frame won't poison the result — median is robust.
+ * Contour arrays use the most recent frame since they vary in point count.
+ */
+export function medianFacialPoints(pointSets: FacialPoints[]): FacialPoints {
+  if (pointSets.length === 1) return pointSets[0];
+
+  const keys: (keyof Omit<FacialPoints, 'leftContour' | 'rightContour'>)[] = [
+    'hairline', 'leftBrowInner', 'leftBrowOuter', 'rightBrowInner', 'rightBrowOuter', 'browCenter',
+    'leftEyeInner', 'leftEyeOuter', 'leftEyeCenter',
+    'rightEyeInner', 'rightEyeOuter', 'rightEyeCenter',
+    'nasion', 'noseTip', 'noseBase', 'leftNoseAlar', 'rightNoseAlar',
+    'mouthLeft', 'mouthRight', 'upperLipTop', 'upperLipBottom', 'lowerLipTop', 'lowerLipBottom',
+    'chin', 'leftJaw', 'rightJaw', 'leftCheek', 'rightCheek',
+  ];
+
+  const result: Partial<FacialPoints> = {};
+  for (const key of keys) {
+    result[key] = medianPoint(pointSets.map(ps => ps[key]));
+  }
+
+  // Use contours from the most recent frame
+  const last = pointSets[pointSets.length - 1];
+  result.leftContour = last.leftContour;
+  result.rightContour = last.rightContour;
+
+  return result as FacialPoints;
+}
+
+/**
+ * Validate that facial points have correct vertical ordering.
+ * Rejects nonsensical frames where e.g. chin is above nose.
+ */
+export function validateFacialPoints(points: FacialPoints): boolean {
+  // Vertical ordering: hairline.y < browCenter.y < noseBase.y < chin.y
+  if (points.hairline.y >= points.browCenter.y) return false;
+  if (points.browCenter.y >= points.noseBase.y) return false;
+  if (points.noseBase.y >= points.chin.y) return false;
+
+  // Cheeks should be separated horizontally
+  const cheekWidth = Math.abs(points.rightCheek.x - points.leftCheek.x);
+  if (cheekWidth < 10) return false;
+
+  // Eyes should be between cheeks
+  const eyeSpan = Math.abs(points.rightEyeCenter.x - points.leftEyeCenter.x);
+  if (eyeSpan < 5) return false;
+
+  return true;
+}
+
 /**
  * Estimate hairline position from face bounds and brow points.
  *
- * Strategy: use the top of the MLKit face bounding box as a baseline.
- * MLKit's bbox top closely approximates the hairline/trichion.
- * We also cross-check with the brow-mirror method and take whichever
- * places the hairline higher (further from chin) for robustness.
+ * Strategy: average two estimation methods and clamp to a reasonable range.
+ * - Method 1: mirror the brow-to-nose distance above the brows
+ * - Method 2: top of the MLKit face bounding box
+ *
+ * Previously took min (highest) of both which could place hairline
+ * unrealistically high, inflating face length and skewing facial thirds.
+ * Now we average them and cap at 1.3x the brow-to-nose distance above
+ * the brows (the upper third shouldn't exceed ~130% of the middle third).
  */
 function estimateHairline(browCenter: Point, noseBase: Point, faceBounds: MLKitFaceData['bounds']): Point {
   const browToNose = Math.abs(noseBase.y - browCenter.y);
+
   // Method 1: mirror brow-to-nose distance above the brows
   const mirrorY = browCenter.y - browToNose;
   // Method 2: top of the face bounding box
   const bboxTopY = faceBounds.y;
-  // Take whichever is higher (smaller y = closer to actual hairline)
-  const hairlineY = Math.min(mirrorY, bboxTopY);
+
+  // Average the two estimates
+  const avgY = (mirrorY + bboxTopY) / 2;
+
+  // Cap: hairline should not be more than 1.3x the middle-third distance
+  // above the brows (prevents wild overestimates from loose bounding boxes)
+  const maxDistance = browToNose * 1.3;
+  const cappedY = Math.max(avgY, browCenter.y - maxDistance);
+
   return {
     x: browCenter.x,
-    y: hairlineY,
+    y: cappedY,
   };
 }
 
@@ -164,17 +242,32 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
   const leftEyeCenter = landmarks.LEFT_EYE ?? midpoint(leftEyeContour[0], leftEyeContour[Math.floor(leftEyeContour.length / 2)]);
   const rightEyeCenter = landmarks.RIGHT_EYE ?? midpoint(rightEyeContour[0], rightEyeContour[Math.floor(rightEyeContour.length / 2)]);
 
-  // Eye inner/outer from contours
-  const leftEyeInner = leftEyeContour[0];
-  const leftEyeOuter = leftEyeContour[Math.floor(leftEyeContour.length / 2)];
-  const rightEyeInner = rightEyeContour[Math.floor(rightEyeContour.length / 2)];
-  const rightEyeOuter = rightEyeContour[0];
+  // Eye inner/outer from contours — use position-based detection (closest/furthest
+  // from face center) instead of index-based, which is fragile if MLKit contour
+  // point ordering varies between devices or SDK versions.
+  const faceCenterX = bounds.x + bounds.width / 2;
+  const leftEyeInner = leftEyeContour.reduce((best, pt) =>
+    Math.abs(pt.x - faceCenterX) < Math.abs(best.x - faceCenterX) ? pt : best, leftEyeContour[0]);
+  const leftEyeOuter = leftEyeContour.reduce((best, pt) =>
+    Math.abs(pt.x - faceCenterX) > Math.abs(best.x - faceCenterX) ? pt : best, leftEyeContour[0]);
+  const rightEyeInner = rightEyeContour.reduce((best, pt) =>
+    Math.abs(pt.x - faceCenterX) < Math.abs(best.x - faceCenterX) ? pt : best, rightEyeContour[0]);
+  const rightEyeOuter = rightEyeContour.reduce((best, pt) =>
+    Math.abs(pt.x - faceCenterX) > Math.abs(best.x - faceCenterX) ? pt : best, rightEyeContour[0]);
 
-  // Brow points
-  const leftBrowInner = leftBrowTop.length > 0 ? leftBrowTop[leftBrowTop.length - 1] : { x: leftEyeInner.x, y: leftEyeInner.y - bounds.height * 0.05 };
-  const leftBrowOuter = leftBrowTop.length > 0 ? leftBrowTop[0] : { x: leftEyeOuter.x, y: leftEyeOuter.y - bounds.height * 0.05 };
-  const rightBrowInner = rightBrowTop.length > 0 ? rightBrowTop[0] : { x: rightEyeInner.x, y: rightEyeInner.y - bounds.height * 0.05 };
-  const rightBrowOuter = rightBrowTop.length > 0 ? rightBrowTop[rightBrowTop.length - 1] : { x: rightEyeOuter.x, y: rightEyeOuter.y - bounds.height * 0.05 };
+  // Brow points — use position-based detection (same approach as eyes)
+  const leftBrowInner = leftBrowTop.length > 0
+    ? leftBrowTop.reduce((best, pt) => Math.abs(pt.x - faceCenterX) < Math.abs(best.x - faceCenterX) ? pt : best, leftBrowTop[0])
+    : { x: leftEyeInner.x, y: leftEyeInner.y - bounds.height * 0.05 };
+  const leftBrowOuter = leftBrowTop.length > 0
+    ? leftBrowTop.reduce((best, pt) => Math.abs(pt.x - faceCenterX) > Math.abs(best.x - faceCenterX) ? pt : best, leftBrowTop[0])
+    : { x: leftEyeOuter.x, y: leftEyeOuter.y - bounds.height * 0.05 };
+  const rightBrowInner = rightBrowTop.length > 0
+    ? rightBrowTop.reduce((best, pt) => Math.abs(pt.x - faceCenterX) < Math.abs(best.x - faceCenterX) ? pt : best, rightBrowTop[0])
+    : { x: rightEyeInner.x, y: rightEyeInner.y - bounds.height * 0.05 };
+  const rightBrowOuter = rightBrowTop.length > 0
+    ? rightBrowTop.reduce((best, pt) => Math.abs(pt.x - faceCenterX) > Math.abs(best.x - faceCenterX) ? pt : best, rightBrowTop[0])
+    : { x: rightEyeOuter.x, y: rightEyeOuter.y - bounds.height * 0.05 };
   const browCenter = midpoint(leftBrowInner, rightBrowInner);
 
   // Nose
@@ -206,10 +299,26 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
   const leftSide = faceContour.filter(p => p.x < faceMidX);
   const rightSide = faceContour.filter(p => p.x >= faceMidX);
 
-  // Jaw (gonion) — face contour points closest to mouth height
+  // Jaw (gonion) — the angle of the mandible, located below the mouth.
+  // Find the widest contour points in the jaw region: from mouth level
+  // down to ~80% of the way to the chin. Previously searched AT mouth
+  // level, which gave cheek points instead of the true gonion.
   const mouthY = mouthLeft.y;
-  const leftJaw = leftSide.reduce((best, pt) => Math.abs(pt.y - mouthY) < Math.abs(best.y - mouthY) ? pt : best, leftSide[0] ?? { x: bounds.x, y: mouthY });
-  const rightJaw = rightSide.reduce((best, pt) => Math.abs(pt.y - mouthY) < Math.abs(best.y - mouthY) ? pt : best, rightSide[0] ?? { x: bounds.x + bounds.width, y: mouthY });
+  const jawRegionTop = mouthY;
+  const jawRegionBottom = mouthY + (chin.y - mouthY) * 0.8;
+  const leftJawRegion = leftSide.filter(p => p.y >= jawRegionTop && p.y <= jawRegionBottom);
+  const rightJawRegion = rightSide.filter(p => p.y >= jawRegionTop && p.y <= jawRegionBottom);
+  // Find widest point on each side (most extreme x)
+  const leftJaw = leftJawRegion.length > 0
+    ? leftJawRegion.reduce((best, pt) => pt.x < best.x ? pt : best, leftJawRegion[0])
+    : leftSide.length > 0
+      ? leftSide.reduce((best, pt) => Math.abs(pt.y - mouthY) < Math.abs(best.y - mouthY) ? pt : best, leftSide[0])
+      : { x: bounds.x, y: mouthY };
+  const rightJaw = rightJawRegion.length > 0
+    ? rightJawRegion.reduce((best, pt) => pt.x > best.x ? pt : best, rightJawRegion[0])
+    : rightSide.length > 0
+      ? rightSide.reduce((best, pt) => Math.abs(pt.y - mouthY) < Math.abs(best.y - mouthY) ? pt : best, rightSide[0])
+      : { x: bounds.x + bounds.width, y: mouthY };
 
   // Cheeks (bizygomatic width) — widest contour points in the CHEEKBONE region only.
   // The full contour includes ears/temples which are wider than the bizygomatic arch.
@@ -237,7 +346,7 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
   const leftContour = faceContour.filter(p => p.x <= symmetryMidX);
   const rightContour = faceContour.filter(p => p.x > symmetryMidX);
 
-  return {
+  const result: FacialPoints = {
     hairline,
     leftBrowInner, leftBrowOuter, rightBrowInner, rightBrowOuter, browCenter,
     leftEyeInner, leftEyeOuter, leftEyeCenter,
@@ -249,4 +358,26 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
     chin, leftJaw, rightJaw, leftCheek, rightCheek,
     leftContour, rightContour,
   };
+
+  if (__DEV__) {
+    const faceLength = distance(hairline, chin);
+    const faceWidth = distance(leftCheek, rightCheek);
+    const jawWidth = distance(leftJaw, rightJaw);
+    const upper = distance(hairline, browCenter);
+    const middle = distance(browCenter, noseBase);
+    const lower = distance(noseBase, chin);
+    console.log('[MogCheck] Landmark mapping:', {
+      faceLength: faceLength.toFixed(1),
+      faceWidth: faceWidth.toFixed(1),
+      faceLW: (faceLength / faceWidth).toFixed(3),
+      jawWidth: jawWidth.toFixed(1),
+      jawFaceRatio: (jawWidth / faceWidth).toFixed(3),
+      thirds: `${((upper / (upper + middle + lower)) * 100).toFixed(0)}/${((middle / (upper + middle + lower)) * 100).toFixed(0)}/${((lower / (upper + middle + lower)) * 100).toFixed(0)}`,
+      eyeSpacing: (distance(leftEyeCenter, rightEyeCenter) / faceWidth).toFixed(3),
+      contourPts: `${faceContour.length} (L:${leftContour.length} R:${rightContour.length})`,
+      jawRegion: `L:${leftJawRegion.length}pts R:${rightJawRegion.length}pts`,
+    });
+  }
+
+  return result;
 }

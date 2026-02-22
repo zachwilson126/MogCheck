@@ -8,10 +8,11 @@ import { GlowButton } from '../components/shared/GlowButton';
 import { CoinBalance } from '../components/store/CoinBalance';
 import { DisclaimerModal } from '../components/shared/DisclaimerBanner';
 import { tierColors } from '../lib/constants/theme';
+import { AdBanner } from '../components/shared/AdBanner';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { scanHistory, highestScore, currentTier, totalScans } = useUserStore();
+  const { scanHistory, highestScore, currentTier, totalScans, isAuthenticated, username } = useUserStore();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -20,7 +21,20 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>MOGCHECK</Text>
-        <CoinBalance />
+        <View style={styles.headerRight}>
+          {isAuthenticated ? (
+            <Pressable style={styles.userChip} onPress={() => router.push('/settings')}>
+              <MaterialCommunityIcons name="account-circle" size={20} color={colors.primary} />
+              <Text style={styles.userChipText}>{username ?? 'Account'}</Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.signInChip} onPress={() => router.push('/auth')}>
+              <MaterialCommunityIcons name="login" size={18} color={colors.primary} />
+              <Text style={styles.signInText}>Sign In</Text>
+            </Pressable>
+          )}
+          <CoinBalance />
+        </View>
       </View>
 
       {/* Main Actions */}
@@ -115,6 +129,11 @@ export default function HomeScreen() {
         )}
       </View>
 
+      {/* Banner Ad */}
+      <View style={{ alignItems: 'center', paddingVertical: 4 }}>
+        <AdBanner />
+      </View>
+
       {/* Bottom nav */}
       <View style={styles.bottomNav}>
         <Pressable style={styles.navItem} onPress={() => router.push('/store')}>
@@ -156,6 +175,42 @@ const styles = StyleSheet.create({
     fontSize: 36,
     color: colors.primary,
     letterSpacing: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  signInChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(57,255,20,0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  signInText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 13,
+    color: colors.primary,
+  },
+  userChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  userChipText: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 13,
+    color: colors.primary,
+    maxWidth: 80,
   },
   mainActions: {
     alignItems: 'center',

@@ -1,13 +1,33 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../lib/constants/theme';
 import { useUserStore } from '../lib/store/useUserStore';
+import { signOut } from '../lib/api/auth';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { totalScans, highestScore, currentTier } = useUserStore();
+  const { totalScans, highestScore, currentTier, isAuthenticated, username, reset } = useUserStore();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = () => {
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          setLoggingOut(true);
+          await signOut();
+          reset();
+          setLoggingOut(false);
+          router.replace('/');
+        },
+      },
+    ]);
+  };
 
   const settingsItems = [
     {
@@ -86,6 +106,35 @@ export default function SettingsScreen() {
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
           </Pressable>
         ))}
+
+        {/* Account */}
+        <Text style={styles.sectionTitle}>Account</Text>
+        {isAuthenticated ? (
+          <>
+            {username && (
+              <View style={styles.settingItem}>
+                <MaterialCommunityIcons name="account" size={22} color={colors.textSecondary} />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>{username}</Text>
+                  <Text style={styles.settingSubtitle}>Signed in</Text>
+                </View>
+              </View>
+            )}
+            <Pressable style={styles.logoutButton} onPress={handleLogout} disabled={loggingOut}>
+              <MaterialCommunityIcons name="logout" size={22} color={colors.error} />
+              <Text style={styles.logoutText}>{loggingOut ? 'Logging out...' : 'Log Out'}</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable style={styles.settingItem} onPress={() => router.push('/auth')}>
+            <MaterialCommunityIcons name="login" size={22} color={colors.primary} />
+            <View style={styles.settingText}>
+              <Text style={[styles.settingTitle, { color: colors.primary }]}>Sign In</Text>
+              <Text style={styles.settingSubtitle}>Sign in to unlock premium features</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+          </Pressable>
+        )}
 
         {/* App Info */}
         <View style={styles.appInfo}>
@@ -186,6 +235,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  logoutText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: colors.error,
   },
   appInfo: {
     alignItems: 'center',

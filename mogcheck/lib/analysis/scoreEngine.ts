@@ -63,6 +63,19 @@ export function analyzeface(points: FacialPoints): AnalysisResult {
   const finalScore = Math.round(curved * 10) / 10;
   const clampedScore = Math.max(1.0, Math.min(10.0, finalScore));
 
+  if (__DEV__) {
+    console.log('[MogCheck] Score breakdown:', {
+      ratioWeightedSum: ratioWeightedSum.toFixed(4),
+      symmetryContrib: (symmetry.score * SYMMETRY_WEIGHT).toFixed(4),
+      rawScore: rawScore.toFixed(4),
+      curved: curved.toFixed(2),
+      finalScore: clampedScore,
+    });
+    ratios.forEach(r => {
+      console.log(`  ${r.name}: measured=${r.measured.toFixed(4)} ideal=${r.ideal.toFixed(4)} dev=${r.deviation.toFixed(4)} score=${r.score.toFixed(3)} (weighted=${(r.score * r.weight).toFixed(4)})`);
+    });
+  }
+
   // Sort ratios by score for strongest/weakest
   const sorted = [...ratios].sort((a, b) => b.score - a.score);
   const strongestRatio = sorted[0];
