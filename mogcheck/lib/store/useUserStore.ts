@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Session, User } from '@supabase/supabase-js';
 import { AnalysisResult } from '../analysis';
-import { supabase, getProfile, saveScanToServer, logCoinTransaction } from '../api/supabase';
+import { supabase, getProfile, saveScanToServer, logCoinTransaction, deleteAllUserData } from '../api/supabase';
+import { signOut } from '../api/auth';
 
 export interface ScanHistoryEntry {
   id: string;
@@ -50,6 +52,8 @@ interface UserState {
   acceptDisclaimer: () => void;
   setUsername: (username: string) => void;
   reset: () => void;
+  /** Delete all user data (server + local photos + state) — for account deletion */
+  fullWipe: () => Promise<{ error: string | null }>;
 }
 
 export const useUserStore = create<UserState>()(
@@ -207,6 +211,57 @@ export const useUserStore = create<UserState>()(
         disclaimerAccepted: state.disclaimerAccepted,
         isSyncing: false,
       })),
+
+      fullWipe: async () => {
+        const { user, scanHistory } = get();
+
+        // 1. Delete all server-side data
+        if (user) {
+          const { error } = await deleteAllUserData(user.id);
+          if (error) {
+            return { error };
+          }
+        }
+
+        // 2. Delete local scan photos
+        try {
+          const photosDir = `${FileSystem.documentDirectory}scan-photos/`;
+          const dirInfo = await FileSystem.getInfoAsync(photosDir);
+          if (dirInfo.exists) {
+            await FileSystem.deleteAsync(photosDir, { idempotent: true });
+          }
+        } catch (err) {
+          if (__DEV__) console.warn('Photo cleanup failed:', err);
+          // Non-fatal — continue with deletion
+        }
+
+        // 3. Sign out (clears auth tokens from SecureStore)
+        await signOut();
+
+        // 4. Clear all local state
+        set({
+          user: null,
+          session: null,
+          isAuthenticated: false,
+          coins: 0,
+          totalScans: 0,
+          highestScore: 0,
+          currentTier: null,
+          username: null,
+          scanHistory: [],
+          disclaimerAccepted: false,
+          isSyncing: false,
+        });
+
+        // 5. Clear AsyncStorage persistence
+        try {
+          await AsyncStorage.removeItem('mogcheck-user-store');
+        } catch {
+          // Non-fatal
+        }
+
+        return { error: null };
+      },
     }),
     {
       name: 'mogcheck-user-store',

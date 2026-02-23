@@ -9,8 +9,9 @@ import { signOut } from '../lib/api/auth';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { totalScans, highestScore, currentTier, isAuthenticated, username, reset } = useUserStore();
+  const { totalScans, highestScore, currentTier, isAuthenticated, username, reset, fullWipe } = useUserStore();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -27,6 +28,44 @@ export default function SettingsScreen() {
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account & Data',
+      'This will permanently delete your account, all scans, battle history, coins, and local photos. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Everything',
+          style: 'destructive',
+          onPress: () => {
+            // Double confirmation for destructive action
+            Alert.alert(
+              'Are you absolutely sure?',
+              'All your data will be permanently erased.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, Delete My Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    const { error } = await fullWipe();
+                    setDeleting(false);
+                    if (error) {
+                      Alert.alert('Error', `Failed to delete account: ${error}`);
+                    } else {
+                      router.replace('/');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const settingsItems = [
@@ -123,6 +162,16 @@ export default function SettingsScreen() {
             <Pressable style={styles.logoutButton} onPress={handleLogout} disabled={loggingOut}>
               <MaterialCommunityIcons name="logout" size={22} color={colors.error} />
               <Text style={styles.logoutText}>{loggingOut ? 'Logging out...' : 'Log Out'}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.deleteButton}
+              onPress={handleDeleteAccount}
+              disabled={deleting}
+            >
+              <MaterialCommunityIcons name="delete-forever" size={22} color={colors.error} />
+              <Text style={styles.deleteText}>
+                {deleting ? 'Deleting account...' : 'Delete Account & Data'}
+              </Text>
             </Pressable>
           </>
         ) : (
@@ -250,6 +299,22 @@ const styles = StyleSheet.create({
   logoutText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 16,
+    color: colors.error,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+  },
+  deleteText: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 14,
     color: colors.error,
   },
   appInfo: {

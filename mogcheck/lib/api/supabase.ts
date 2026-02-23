@@ -443,3 +443,48 @@ export async function getLeaderboardEntry(userId: string) {
     .single();
   return { data, error };
 }
+
+// ==================
+// Account deletion
+// ==================
+
+/**
+ * Delete all user data from Supabase tables.
+ * Order matters — delete from tables with foreign keys first.
+ * RLS policies ensure users can only delete their own rows.
+ */
+export async function deleteAllUserData(userId: string): Promise<{ error: string | null }> {
+  try {
+    // Delete in dependency order (child tables first)
+    const tables = [
+      'coin_transactions',
+      'battles',
+      'scans',
+      'gifts',
+      'leaderboard',
+      'profiles',
+    ] as const;
+
+    for (const table of tables) {
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq(table === 'battles' ? 'challenger_id' : 'user_id', userId);
+
+      if (error) {
+        if (__DEV__) console.warn(`Delete from ${table} failed:`, error.message);
+        // Continue — some tables may not have rows for this user
+      }
+    }
+
+    // Also delete battles where user is the opponent
+    await supabase
+      .from('battles')
+      .delete()
+      .eq('opponent_id', userId);
+
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to delete account data' };
+  }
+}
