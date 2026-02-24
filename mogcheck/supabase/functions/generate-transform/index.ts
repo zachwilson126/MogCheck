@@ -96,7 +96,6 @@ Deno.serve(async (req) => {
     });
 
     // 5. Call Replicate SDXL img2img
-    console.log('Calling Replicate SDXL img2img...');
     const createResponse = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: {
@@ -132,7 +131,6 @@ Deno.serve(async (req) => {
     }
 
     let result = await createResponse.json();
-    console.log('Replicate prediction status:', result.status);
 
     // 6. Poll for completion if sync mode didn't finish
     if (result.status !== 'succeeded' && result.urls?.get) {
@@ -145,7 +143,6 @@ Deno.serve(async (req) => {
           headers: { Authorization: `Bearer ${REPLICATE_API_TOKEN}` },
         });
         result = await pollResponse.json();
-        console.log(`Poll ${i + 1}: status=${result.status}`);
       }
     }
 
@@ -161,15 +158,13 @@ Deno.serve(async (req) => {
     // 7. Get output image URL
     const outputUrl = Array.isArray(result.output) ? result.output[0] : result.output;
     if (!outputUrl) {
-      console.error('No output URL in result:', JSON.stringify(result));
+      console.error('No output URL in result');
       await refundCoins(supabase, user.id, profile.coins);
       return new Response(
         JSON.stringify({ error: 'No image generated. Coins refunded.' }),
         { status: 502 },
       );
     }
-
-    console.log('Fetching generated image from:', outputUrl);
 
     // 8. Fetch generated image and convert to base64
     const imageResponse = await fetch(outputUrl);
@@ -184,8 +179,6 @@ Deno.serve(async (req) => {
 
     const outputBytes = new Uint8Array(await imageResponse.arrayBuffer());
     const outputBase64 = base64Encode(outputBytes);
-
-    console.log('Transform complete, returning image');
 
     return new Response(
       JSON.stringify({

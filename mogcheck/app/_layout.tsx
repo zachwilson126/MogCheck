@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
@@ -12,6 +13,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
+import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import { paperTheme, colors } from '../lib/constants/theme';
 import { onAuthStateChange } from '../lib/api/auth';
 import { useUserStore } from '../lib/store/useUserStore';
@@ -30,6 +32,14 @@ export default function RootLayout() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
+
+  // Request App Tracking Transparency permission (iOS 14+)
+  // Must happen before ads initialize to get personalized ads
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      requestTrackingPermissionsAsync();
+    }
+  }, []);
 
   // Listen for auth state changes
   useEffect(() => {
