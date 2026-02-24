@@ -59,9 +59,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
-      }
+        "projectId": "9bda857b-bd2d-490d-b3a1-2a1d0fddd286"
+      },
+      "router": {}
     },
-    "owner": "mogcheck"
+    "owner": "zachw126"
   }
 }
