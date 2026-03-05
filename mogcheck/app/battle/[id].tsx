@@ -191,7 +191,8 @@ export default function BattleScreen() {
 async function handleShareBattle(scan: ScanHistoryEntry) {
   try {
     await Share.share({
-      message: `I scored ${scan.score.toFixed(1)} (${scan.tierName}) on MogCheck. Think you can mog me? 💀\n\nDownload MogCheck and find out.`,
+      message: `I scored ${scan.score.toFixed(1)} (${scan.tierName}) on MogCheck. Think you can mog me? 💀 Accept the battle:`,
+      url: `mogcheck://battle/${scan.id}`,
     });
   } catch {
     // User cancelled

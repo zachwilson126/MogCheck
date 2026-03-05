@@ -59,11 +59,9 @@ export default function RootLayout() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
-      const battleMatch = url.match(/battle\/([A-Za-z0-9]+)/);
+      const battleMatch = url.match(/battle\/([A-Za-z0-9-]+)/);
       if (battleMatch) {
-        // Deep link to battle — for now navigate to scan with battle context
-        // In full implementation, this would load the battle from server
-        router.push('/scan');
+        router.push(`/battle/${battleMatch[1]}`);
       }
     };
 
