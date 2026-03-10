@@ -10,7 +10,7 @@
  * Get your ad unit IDs from https://admob.google.com
  */
 
-import {
+import mobileAds, {
   InterstitialAd,
   RewardedAd,
   RewardedAdEventType,
@@ -37,6 +37,32 @@ const AD_UNITS = {
 
 export { AD_UNITS };
 
+// Track SDK initialization state
+let adsInitialized = false;
+
+/**
+ * Initialize the Google Mobile Ads SDK.
+ * Must be called before any ad is requested.
+ * Safe to call multiple times — only initializes once.
+ */
+export async function initializeAds(): Promise<void> {
+  if (adsInitialized) return;
+  try {
+    await mobileAds().initialize();
+    adsInitialized = true;
+  } catch {
+    // Ads SDK failed to init (e.g. on iPad compatibility mode) — fail silently
+    adsInitialized = false;
+  }
+}
+
+/**
+ * Check if the ads SDK has been successfully initialized.
+ */
+export function isAdsInitialized(): boolean {
+  return adsInitialized;
+}
+
 // Pre-loaded interstitial instance
 let interstitial: InterstitialAd | null = null;
 let isInterstitialLoaded = false;
@@ -46,6 +72,7 @@ let isInterstitialLoaded = false;
  * Call this when the scan screen mounts.
  */
 export function preloadInterstitial(): void {
+  if (!adsInitialized) return;
   try {
     interstitial = InterstitialAd.createForAdRequest(AD_UNITS.interstitial);
 
@@ -105,6 +132,7 @@ let isRewardedLoaded = false;
  * Pre-load a rewarded ad so it's ready when the user taps "Watch Ad".
  */
 export function preloadRewarded(): void {
+  if (!adsInitialized) return;
   try {
     rewarded = RewardedAd.createForAdRequest(AD_UNITS.rewarded);
 

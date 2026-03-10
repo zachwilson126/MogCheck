@@ -17,6 +17,7 @@ import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import { paperTheme, colors } from '../lib/constants/theme';
 import { onAuthStateChange } from '../lib/api/auth';
 import { useUserStore } from '../lib/store/useUserStore';
+import { initializeAds } from '../lib/ads/adManager';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,11 +34,15 @@ export default function RootLayout() {
     PlusJakartaSans_700Bold,
   });
 
-  // Request App Tracking Transparency permission (iOS 14+)
-  // Must happen before ads initialize to get personalized ads
+  // Request App Tracking Transparency permission (iOS 14+),
+  // then initialize the ads SDK (must happen after ATT for personalized ads)
   useEffect(() => {
     if (Platform.OS === 'ios') {
-      requestTrackingPermissionsAsync();
+      requestTrackingPermissionsAsync().finally(() => {
+        initializeAds();
+      });
+    } else {
+      initializeAds();
     }
   }, []);
 
