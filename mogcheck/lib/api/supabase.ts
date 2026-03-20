@@ -36,11 +36,22 @@ const SecureStoreAdapter = {
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: SecureStoreAdapter,
-    autoRefreshToken: true,
+    // We refresh on-demand in app flows instead of letting the auth client
+    // retry in the background and surface noisy LogBox network errors.
+    autoRefreshToken: false,
     persistSession: true,
     detectSessionInUrl: false,
   },
 });
+
+export async function refreshSessionSafely() {
+  try {
+    return await supabase.auth.refreshSession();
+  } catch (err) {
+    if (__DEV__) console.warn('[MogCheck] Session refresh failed:', err);
+    return { data: { session: null }, error: err };
+  }
+}
 
 // ==================
 // Profile helpers
@@ -142,7 +153,7 @@ export async function callEdgeFunction<T = unknown>(
   body: Record<string, unknown>,
 ): Promise<{ data: T | null; error: string | null }> {
   // Force refresh to avoid stale JWTs
-  const { data: refreshData } = await supabase.auth.refreshSession();
+  const { data: refreshData } = await refreshSessionSafely();
   let token = refreshData?.session?.access_token;
 
   if (!token) {
@@ -226,7 +237,7 @@ export async function generateTransform(
 ): Promise<{ transformedImage: string | null; disclaimer: string | null; error: string | null }> {
   try {
     // Force token refresh to avoid stale JWTs
-    await supabase.auth.refreshSession();
+    await refreshSessionSafely();
     const { data: freshSession } = await supabase.auth.getSession();
     const token = freshSession?.session?.access_token;
 

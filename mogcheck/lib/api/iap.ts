@@ -79,6 +79,9 @@ export async function purchaseCoinPack(productId: string): Promise<void> {
  * Set up listeners for purchase completions and errors.
  */
 function setupPurchaseListeners() {
+  purchaseUpdateSubscription?.remove();
+  purchaseErrorSubscription?.remove();
+
   purchaseUpdateSubscription = purchaseUpdatedListener(async (purchase: Purchase) => {
     if (!purchase.purchaseToken) return;
 

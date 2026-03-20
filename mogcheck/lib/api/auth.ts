@@ -2,6 +2,7 @@
  * Authentication helpers wrapping Supabase auth.
  */
 
+import * as Linking from 'expo-linking';
 import { supabase, getProfile } from './supabase';
 import { Session, User } from '@supabase/supabase-js';
 
@@ -11,17 +12,27 @@ export interface AuthState {
   isLoading: boolean;
 }
 
+const EMAIL_REDIRECT_URL = Linking.createURL('auth/callback', {
+  scheme: 'mogcheck',
+});
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 /**
  * Sign up with email and password.
  * Creates a profile row via a Supabase trigger (or manually).
  * Returns `needsConfirmation: true` when email verification is required.
  */
 export async function signUp(email: string, password: string, username?: string) {
+  const normalizedEmail = normalizeEmail(email);
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: normalizedEmail,
     password,
     options: {
       data: { username },
+      emailRedirectTo: EMAIL_REDIRECT_URL,
     },
   });
 
@@ -51,8 +62,9 @@ export async function signUp(email: string, password: string, username?: string)
  * Provides user-friendly error messages for common Supabase auth failures.
  */
 export async function signIn(email: string, password: string) {
+  const normalizedEmail = normalizeEmail(email);
   const { data, error } = await supabase.auth.signInWithPassword({
-    email,
+    email: normalizedEmail,
     password,
   });
 
@@ -74,9 +86,13 @@ export async function signIn(email: string, password: string) {
  * Resend the confirmation email for a given address.
  */
 export async function resendConfirmationEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email);
   const { error } = await supabase.auth.resend({
     type: 'signup',
-    email,
+    email: normalizedEmail,
+    options: {
+      emailRedirectTo: EMAIL_REDIRECT_URL,
+    },
   });
   return { error: error?.message ?? null };
 }

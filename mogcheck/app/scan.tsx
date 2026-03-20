@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -76,6 +76,7 @@ export default function ScanScreen() {
   const [feedbackText, setFeedbackText] = useState(pick(IDLE_TEXTS));
   const [capturing, setCapturing] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [cameraInitialized, setCameraInitialized] = useState(false);
   const lastFaceRef = useRef<Face | null>(null);
   const faceBufferRef = useRef<Face[]>([]);
   const analyzingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -143,12 +144,13 @@ export default function ScanScreen() {
     preloadRewarded();
     return () => {
       reset();
+      setCameraInitialized(false);
       if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
     };
   }, []);
 
   const handleManualCapture = async () => {
-    if (!cameraRef.current || phase !== 'detecting' || capturing) return;
+    if (!cameraRef.current || phase !== 'detecting' || capturing || !cameraInitialized) return;
 
     const faceData = lastFaceRef.current;
     if (!faceData) {
@@ -268,6 +270,21 @@ export default function ScanScreen() {
     }
   };
 
+  const handleCameraError = useCallback((error: { code?: string; message?: string }) => {
+    if (__DEV__) {
+      console.error('[MogCheck] Camera error:', error.code, error.message);
+    }
+
+    setCameraInitialized(false);
+    setCapturing(false);
+
+    if (analyzingIntervalRef.current) {
+      clearInterval(analyzingIntervalRef.current);
+    }
+
+    setError('camera crashed mid-scan. give it a second and try again.');
+  }, [setError]);
+
   // Permission denied
   if (!hasPermission) {
     return (
@@ -299,13 +316,23 @@ export default function ScanScreen() {
       {/* Camera with face detection frame processor */}
       <Camera
         ref={cameraRef}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, styles.camera]}
         device={device}
         isActive={phase === 'detecting' || phase === 'analyzing'}
         photo
         pixelFormat="yuv"
-        frameProcessor={frameProcessor}
+        frameProcessor={phase === 'detecting' && !capturing ? frameProcessor : undefined}
+        onInitialized={() => setCameraInitialized(true)}
+        onError={handleCameraError}
       />
+
+      {!cameraInitialized && (
+        <View style={styles.cameraLoadingOverlay}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.cameraLoadingTitle}>warming up the scanner...</Text>
+          <Text style={styles.cameraLoadingText}>getting the camera ready so we do not jump-scare u</Text>
+        </View>
+      )}
 
       {/* Face Guide Overlay */}
       <FaceGuide faceDetected={faceDetected} faceAligned={faceDetected} />
@@ -386,7 +413,10 @@ export default function ScanScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: colors.background,
+  },
+  camera: {
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
@@ -394,6 +424,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     gap: 16,
+  },
+  cameraLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+    zIndex: 1,
+  },
+  cameraLoadingTitle: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 20,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  cameraLoadingText: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   title: {
     fontFamily: 'BebasNeue_400Regular',

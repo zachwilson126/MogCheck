@@ -7,6 +7,8 @@ import { colors } from '../lib/constants/theme';
 import { useUserStore } from '../lib/store/useUserStore';
 import { signOut } from '../lib/api/auth';
 
+const LEGAL_URL = 'https://www.notion.so/MogCheck-Legal-31a12b236d3b8008a624fbe385bbcdf6?source=copy_link';
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { totalScans, highestScore, currentTier, isAuthenticated, username, reset, fullWipe } = useUserStore();
@@ -90,16 +92,10 @@ export default function SettingsScreen() {
       onPress: () => Linking.openURL('sms:741741'),
     },
     {
-      icon: 'file-document' as const,
-      title: 'Terms of Service',
-      subtitle: 'Read our terms',
-      onPress: () => Linking.openURL('https://mogcheck.app/terms'),
-    },
-    {
       icon: 'shield-lock' as const,
-      title: 'Privacy Policy',
-      subtitle: 'How we handle your data',
-      onPress: () => Linking.openURL('https://mogcheck.app/privacy'),
+      title: 'Legal, Terms & Privacy',
+      subtitle: 'View MogCheck legal information',
+      onPress: () => Linking.openURL(LEGAL_URL),
     },
   ];
 

@@ -21,12 +21,16 @@
       "infoPlist": {
         "NSCameraUsageDescription": "MogCheck needs camera access to scan and analyze your facial proportions.",
         "NSPhotoLibraryUsageDescription": "MogCheck needs photo library access so you can upload existing photos for analysis.",
+        "NSLocalNetworkUsageDescription": "MogCheck needs local network access during development so your iPhone can load the app bundle from your Mac.",
         "NSUserTrackingUsageDescription": "MogCheck uses this to show you relevant ads. Your data is never sold.",
         "NSLocationWhenInUseUsageDescription": "Required by third-party SDKs used for facial analysis. MogCheck does not use your location.",
         "ITSAppUsesNonExemptEncryption": false,
+        "UIRequiresFullScreen": true,
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait"
+        ],
         "UISupportedInterfaceOrientations~ipad": [
-          "UIInterfaceOrientationPortrait",
-          "UIInterfaceOrientationPortraitUpsideDown"
+          "UIInterfaceOrientationPortrait"
         ]
       }
     },
@@ -58,13 +62,6 @@
             "./assets/fonts/PlusJakartaSans-SemiBold.ttf",
             "./assets/fonts/PlusJakartaSans-Bold.ttf"
           ]
-        }
-      ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "iosAppId": "ca-app-pub-8349767626456723~3472604748",
-          "delayAppMeasurementInit": true
         }
       ]
     ],

@@ -14,6 +14,7 @@ export default function AuthScreen() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [resending, setResending] = useState(false);
 
@@ -24,18 +25,21 @@ export default function AuthScreen() {
     }
     setResending(true);
     setError(null);
+    setInfo(null);
     const result = await resendConfirmationEmail(email);
     setResending(false);
     if (result.error) {
       setError(result.error);
     } else {
       setError(null);
+      setInfo(`Confirmation email sent to ${email.trim().toLowerCase()}.`);
       setConfirmationSent(true);
     }
   };
 
   const handleSubmit = async () => {
     setError(null);
+    setInfo(null);
     setConfirmationSent(false);
     setLoading(true);
 
@@ -46,6 +50,7 @@ export default function AuthScreen() {
           setError(result.error);
         } else if (result.needsConfirmation) {
           // Email confirmation is required — tell the user
+          setInfo(`Confirmation email sent to ${email.trim().toLowerCase()}.`);
           setConfirmationSent(true);
         } else {
           router.replace('/');
@@ -90,6 +95,7 @@ export default function AuthScreen() {
             style={{ marginTop: 16, width: '100%' }}
           />
 
+          {info && <Text style={styles.info}>{info}</Text>}
           {error && <Text style={styles.error}>{error}</Text>}
 
           <Pressable
@@ -154,6 +160,7 @@ export default function AuthScreen() {
         />
 
         {error && <Text style={styles.error}>{error}</Text>}
+        {info && <Text style={styles.info}>{info}</Text>}
 
         <GlowButton
           title={loading ? 'Loading...' : mode === 'signup' ? 'Create Account' : 'Sign In'}
@@ -219,6 +226,12 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_500Medium',
     fontSize: 14,
     color: colors.error,
+    textAlign: 'center',
+  },
+  info: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 14,
+    color: colors.primary,
     textAlign: 'center',
   },
   switchText: {
