@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-nati
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Product } from 'react-native-iap';
+import type { Product } from 'react-native-iap';
 import { colors } from '../lib/constants/theme';
 import { CoinBalance } from '../components/store/CoinBalance';
 import { GlowButton } from '../components/shared/GlowButton';
