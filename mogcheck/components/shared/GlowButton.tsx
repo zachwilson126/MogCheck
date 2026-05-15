@@ -1,13 +1,4 @@
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  withSequence,
-  Easing,
-} from 'react-native-reanimated';
-import { useEffect } from 'react';
 import { colors, fonts } from '../../lib/constants/theme';
 
 interface GlowButtonProps {
@@ -21,8 +12,6 @@ interface GlowButtonProps {
   style?: ViewStyle;
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 export function GlowButton({
   title,
   onPress,
@@ -33,30 +22,6 @@ export function GlowButton({
   pulsing = false,
   style,
 }: GlowButtonProps) {
-  const scale = useSharedValue(1);
-  const glowOpacity = useSharedValue(0.3);
-
-  useEffect(() => {
-    if (pulsing && !disabled) {
-      glowOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.6, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0.3, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        true,
-      );
-    }
-  }, [pulsing, disabled, glowOpacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value,
-  }));
-
   const isPrimary = variant === 'primary';
   const isOutline = variant === 'outline';
 
@@ -69,31 +34,21 @@ export function GlowButton({
   const fontSizes = { large: 20, medium: 16, small: 14 };
 
   return (
-    <AnimatedPressable
+    <Pressable
       onPress={onPress}
       disabled={disabled}
-      onPressIn={() => { scale.value = withTiming(0.96, { duration: 100 }); }}
-      onPressOut={() => { scale.value = withTiming(1, { duration: 100 }); }}
-      style={[
-        animatedStyle,
+      style={({ pressed }) => [
         styles.container,
         sizeStyles[size],
         isPrimary && { backgroundColor: color },
         isOutline && { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: color },
         !isPrimary && !isOutline && { backgroundColor: 'rgba(57, 255, 20, 0.15)' },
-        disabled && { opacity: 0.5 },
+        pulsing && !disabled && styles.pulsing,
+        pressed && !disabled && styles.pressed,
+        disabled && styles.disabled,
         style,
       ]}
     >
-      {pulsing && !disabled && (
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: color, borderRadius: sizeStyles[size].borderRadius },
-            glowStyle,
-          ]}
-        />
-      )}
       <Text
         style={[
           styles.text,
@@ -105,7 +60,7 @@ export function GlowButton({
       >
         {title}
       </Text>
-    </AnimatedPressable>
+    </Pressable>
   );
 }
 
@@ -114,6 +69,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  pulsing: {
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  disabled: {
+    opacity: 0.5,
   },
   text: {
     fontFamily: 'PlusJakartaSans_700Bold',

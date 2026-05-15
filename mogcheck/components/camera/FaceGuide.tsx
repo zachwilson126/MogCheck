@@ -1,13 +1,5 @@
-import { View, StyleSheet, Dimensions } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  withSequence,
-  Easing,
-} from 'react-native-reanimated';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { Animated, View, StyleSheet, Dimensions, Easing } from 'react-native';
 import Svg, { Defs, Rect, Mask, Ellipse } from 'react-native-svg';
 import { colors } from '../../lib/constants/theme';
 
@@ -23,21 +15,42 @@ interface FaceGuideProps {
 }
 
 export function FaceGuide({ faceDetected, faceAligned }: FaceGuideProps) {
-  const borderPulse = useSharedValue(1);
+  const borderPulse = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
+    pulseLoopRef.current?.stop();
+
     if (faceAligned) {
-      borderPulse.value = withRepeat(
-        withSequence(
-          withTiming(1.02, { duration: 600, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        true,
+      const pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(borderPulse, {
+            toValue: 1.02,
+            duration: 600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(borderPulse, {
+            toValue: 1,
+            duration: 600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
       );
+      pulseLoopRef.current = pulseLoop;
+      pulseLoop.start();
     } else {
-      borderPulse.value = withTiming(1, { duration: 200 });
+      Animated.timing(borderPulse, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
     }
+
+    return () => {
+      pulseLoopRef.current?.stop();
+    };
   }, [faceAligned, borderPulse]);
 
   const borderColor = faceAligned
@@ -46,9 +59,9 @@ export function FaceGuide({ faceDetected, faceAligned }: FaceGuideProps) {
       ? colors.warning
       : 'rgba(255,255,255,0.3)';
 
-  const animatedBorder = useAnimatedStyle(() => ({
-    transform: [{ scale: borderPulse.value }],
-  }));
+  const animatedBorder = {
+    transform: [{ scale: borderPulse }],
+  };
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">

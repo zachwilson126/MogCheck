@@ -15,8 +15,8 @@ echo "Fixing iOS build issues..."
 PROPS="$IOS_DIR/Podfile.properties.json"
 if [ -f "$PROPS" ]; then
   if ! grep -q '"ios.deploymentTarget"' "$PROPS"; then
-    # Add deploymentTarget before the closing brace
-    sed -i '' 's/"newArchEnabled": "true"/"newArchEnabled": "true",\n  "ios.deploymentTarget": "16.0"/' "$PROPS"
+    # Add deploymentTarget before the closing brace without changing newArchEnabled.
+    sed -i '' 's/"newArchEnabled": "\(true\|false\)"/"newArchEnabled": "\1",\n  "ios.deploymentTarget": "16.0"/' "$PROPS"
     echo "  Fixed: Added ios.deploymentTarget to Podfile.properties.json"
   else
     echo "  OK: ios.deploymentTarget already set"

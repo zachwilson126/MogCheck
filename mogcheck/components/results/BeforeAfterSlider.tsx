@@ -1,13 +1,9 @@
-import { View, Image, Text, StyleSheet } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  clamp,
-} from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Image, Text, StyleSheet, PanResponder } from 'react-native';
 import { colors } from '../../lib/constants/theme';
 
 const SLIDER_HEIGHT = 380;
+const HANDLE_INSET = 20;
 
 interface BeforeAfterSliderProps {
   beforeUri: string;
@@ -15,30 +11,50 @@ interface BeforeAfterSliderProps {
   width: number;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 export function BeforeAfterSlider({ beforeUri, afterUri, width }: BeforeAfterSliderProps) {
-  const offset = useSharedValue(width / 2);
-  const position = useSharedValue(width / 2);
+  const initialPosition = clamp(width / 2, HANDLE_INSET, width - HANDLE_INSET);
+  const [position, setPosition] = useState(initialPosition);
+  const positionRef = useRef(initialPosition);
+  const startPositionRef = useRef(initialPosition);
 
-  const panGesture = Gesture.Pan()
-    .onStart(() => {
-      offset.value = position.value;
-    })
-    .onUpdate((e) => {
-      position.value = clamp(offset.value + e.translationX, 20, width - 20);
-    });
+  const setClampedPosition = useCallback((nextPosition: number) => {
+    const clamped = clamp(nextPosition, HANDLE_INSET, width - HANDLE_INSET);
+    positionRef.current = clamped;
+    setPosition(clamped);
+  }, [width]);
 
-  const beforeClipStyle = useAnimatedStyle(() => ({
-    width: position.value,
-  }));
+  useEffect(() => {
+    setClampedPosition(positionRef.current);
+  }, [setClampedPosition]);
 
-  const dividerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: position.value - 1 }],
-  }));
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (event) => {
+        startPositionRef.current = positionRef.current;
+        if (Number.isFinite(event.nativeEvent.locationX)) {
+          setClampedPosition(event.nativeEvent.locationX);
+          startPositionRef.current = event.nativeEvent.locationX;
+        }
+      },
+      onPanResponderMove: (_event, gestureState) => {
+        setClampedPosition(startPositionRef.current + gestureState.dx);
+      },
+    }),
+    [setClampedPosition],
+  );
+
+  const beforeClipStyle = { width: position };
+  const dividerStyle = { transform: [{ translateX: position - 1 }] };
 
   return (
     <View style={[styles.container, { width, height: SLIDER_HEIGHT }]}>
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[StyleSheet.absoluteFill]}>
+      <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
           {/* After image (full width, behind) */}
           <Image
             source={{ uri: afterUri }}
@@ -47,21 +63,21 @@ export function BeforeAfterSlider({ beforeUri, afterUri, width }: BeforeAfterSli
           />
 
           {/* Before image (clipped to left portion) */}
-          <Animated.View style={[styles.beforeClip, beforeClipStyle]}>
+          <View style={[styles.beforeClip, beforeClipStyle]}>
             <Image
               source={{ uri: beforeUri }}
               style={[styles.image, { width, height: SLIDER_HEIGHT }]}
               resizeMode="cover"
             />
-          </Animated.View>
+          </View>
 
           {/* Divider line */}
-          <Animated.View style={[styles.divider, dividerStyle]}>
+          <View style={[styles.divider, dividerStyle]}>
             <View style={styles.dividerLine} />
             <View style={styles.dividerHandle}>
               <Text style={styles.dividerIcon}>{'◀ ▶'}</Text>
             </View>
-          </Animated.View>
+          </View>
 
           {/* Labels */}
           <View style={styles.labelRow}>
@@ -72,8 +88,7 @@ export function BeforeAfterSlider({ beforeUri, afterUri, width }: BeforeAfterSli
               <Text style={styles.labelText}>AFTER</Text>
             </View>
           </View>
-        </Animated.View>
-      </GestureDetector>
+      </View>
     </View>
   );
 }

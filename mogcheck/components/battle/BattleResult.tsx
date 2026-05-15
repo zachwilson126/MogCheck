@@ -1,15 +1,5 @@
-import { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withDelay,
-  withSpring,
-  withSequence,
-  withTiming,
-  FadeIn,
-  ZoomIn,
-} from 'react-native-reanimated';
+import { useEffect, useRef } from 'react';
+import { Animated, View, Text, StyleSheet, Easing } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { colors, tierColors } from '../../lib/constants/theme';
 import { useScreenShake } from '../../lib/hooks/useScreenShake';
@@ -33,75 +23,97 @@ export function BattleResult({
   loserTier,
   scoreDiff,
 }: BattleResultProps) {
-  const stampScale = useSharedValue(0);
-  const stampRotation = useSharedValue(-15);
+  const stampScale = useRef(new Animated.Value(0)).current;
+  const stampRotation = useRef(new Animated.Value(-15)).current;
   const { shakeX, triggerShake } = useScreenShake();
 
   useEffect(() => {
-    stampScale.value = withDelay(
-      600,
-      withSequence(
-        withSpring(1.3, { damping: 4, stiffness: 200 }),
-        withSpring(1.0, { damping: 8 }),
-      ),
-    );
-    stampRotation.value = withDelay(
-      600,
-      withSequence(
-        withTiming(-20, { duration: 100 }),
-        withSpring(-8, { damping: 6 }),
-      ),
-    );
+    const reveal = Animated.delay(600);
+    const scaleIn = Animated.sequence([
+      Animated.spring(stampScale, {
+        toValue: 1.3,
+        damping: 4,
+        stiffness: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(stampScale, {
+        toValue: 1,
+        damping: 8,
+        useNativeDriver: true,
+      }),
+    ]);
+    const rotateIn = Animated.sequence([
+      Animated.timing(stampRotation, {
+        toValue: -20,
+        duration: 100,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.spring(stampRotation, {
+        toValue: -8,
+        damping: 6,
+        useNativeDriver: true,
+      }),
+    ]);
 
-    // Screen shake + haptic when stamp appears
+    Animated.sequence([
+      reveal,
+      Animated.parallel([scaleIn, rotateIn]),
+    ]).start();
+
     const timer = setTimeout(() => {
       triggerShake();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }, 600);
 
-    return () => clearTimeout(timer);
-  }, []);
+    return () => {
+      clearTimeout(timer);
+      stampScale.stopAnimation();
+      stampRotation.stopAnimation();
+    };
+  }, [stampRotation, stampScale, triggerShake]);
 
-  const stampStyle = useAnimatedStyle(() => ({
+  const stampStyle = {
     transform: [
-      { scale: stampScale.value },
-      { rotate: `${stampRotation.value}deg` },
+      { scale: stampScale },
+      {
+        rotate: stampRotation.interpolate({
+          inputRange: [-20, 0],
+          outputRange: ['-20deg', '0deg'],
+        }),
+      },
     ],
-  }));
+  };
 
-  const containerShakeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shakeX.value }],
-  }));
+  const containerShakeStyle = {
+    transform: [{ translateX: shakeX }],
+  };
 
   const winnerColor = tierColors[winnerTier] ?? colors.primary;
   const mogText = scoreDiff >= 2 ? 'GIGAMOGGED' : scoreDiff >= 1 ? 'MOGGED' : 'EDGED OUT';
 
   return (
     <Animated.View style={[styles.container, containerShakeStyle]}>
-      {/* Winner side */}
-      <Animated.View entering={FadeIn.delay(200).duration(500)} style={styles.winnerCard}>
+      <Animated.View style={styles.winnerCard}>
         <Text style={styles.crownEmoji}>{'👑'}</Text>
         <Text style={[styles.winnerName, { color: winnerColor }]}>{winnerName}</Text>
         <Text style={[styles.winnerScore, { color: winnerColor }]}>{winnerScore.toFixed(1)}</Text>
         <Text style={[styles.winnerTier, { color: winnerColor }]}>{winnerTier}</Text>
       </Animated.View>
 
-      {/* MOG stamp */}
       <Animated.View style={[styles.stampContainer, stampStyle]}>
         <View style={[styles.stamp, { borderColor: winnerColor }]}>
           <Text style={[styles.stampText, { color: winnerColor }]}>{mogText}</Text>
         </View>
       </Animated.View>
 
-      {/* Loser side */}
-      <Animated.View entering={FadeIn.delay(400).duration(500)} style={styles.loserCard}>
+      <Animated.View style={styles.loserCard}>
         <Text style={styles.loserName}>{loserName}</Text>
         <Text style={styles.loserScore}>{loserScore.toFixed(1)}</Text>
         <Text style={styles.loserTier}>{loserTier}</Text>
       </Animated.View>
 
-      {/* Score diff */}
-      <Animated.View entering={ZoomIn.delay(800).duration(400)}>
+      <Animated.View>
         <Text style={styles.diffText}>
           {scoreDiff.toFixed(1)} point{scoreDiff >= 2 ? '' : ''} difference
         </Text>

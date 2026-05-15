@@ -106,6 +106,10 @@ function midpoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
+function point(x: number, y: number): Point {
+  return { x, y };
+}
+
 function distance(a: Point, b: Point): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
@@ -203,16 +207,118 @@ function estimateHairline(browCenter: Point, noseBase: Point, _faceBounds: MLKit
   };
 }
 
+function buildApproximateFacialPoints(face: MLKitFaceData): FacialPoints | null {
+  const { landmarks = {}, contours = {}, bounds } = face;
+
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+    return null;
+  }
+
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  const leftEyeCenter = landmarks.LEFT_EYE ?? point(bounds.x + bounds.width * 0.35, bounds.y + bounds.height * 0.38);
+  const rightEyeCenter = landmarks.RIGHT_EYE ?? point(bounds.x + bounds.width * 0.65, bounds.y + bounds.height * 0.38);
+  const leftEyeInner = contours.LEFT_EYE?.length
+    ? contours.LEFT_EYE.reduce((best, pt) => Math.abs(pt.x - centerX) < Math.abs(best.x - centerX) ? pt : best, contours.LEFT_EYE[0])
+    : point(bounds.x + bounds.width * 0.44, leftEyeCenter.y);
+  const leftEyeOuter = contours.LEFT_EYE?.length
+    ? contours.LEFT_EYE.reduce((best, pt) => Math.abs(pt.x - centerX) > Math.abs(best.x - centerX) ? pt : best, contours.LEFT_EYE[0])
+    : point(bounds.x + bounds.width * 0.26, leftEyeCenter.y);
+  const rightEyeInner = contours.RIGHT_EYE?.length
+    ? contours.RIGHT_EYE.reduce((best, pt) => Math.abs(pt.x - centerX) < Math.abs(best.x - centerX) ? pt : best, contours.RIGHT_EYE[0])
+    : point(bounds.x + bounds.width * 0.56, rightEyeCenter.y);
+  const rightEyeOuter = contours.RIGHT_EYE?.length
+    ? contours.RIGHT_EYE.reduce((best, pt) => Math.abs(pt.x - centerX) > Math.abs(best.x - centerX) ? pt : best, contours.RIGHT_EYE[0])
+    : point(bounds.x + bounds.width * 0.74, rightEyeCenter.y);
+
+  const leftBrowInner = point(leftEyeInner.x, leftEyeInner.y - bounds.height * 0.08);
+  const leftBrowOuter = point(leftEyeOuter.x, leftEyeOuter.y - bounds.height * 0.08);
+  const rightBrowInner = point(rightEyeInner.x, rightEyeInner.y - bounds.height * 0.08);
+  const rightBrowOuter = point(rightEyeOuter.x, rightEyeOuter.y - bounds.height * 0.08);
+  const browCenter = midpoint(leftBrowInner, rightBrowInner);
+
+  const nasion = midpoint(leftEyeInner, rightEyeInner);
+  const noseTip = point(centerX, bounds.y + bounds.height * 0.52);
+  const noseBase = landmarks.NOSE_BASE ?? point(centerX, bounds.y + bounds.height * 0.60);
+  const leftNoseAlar = point(centerX - bounds.width * 0.06, noseBase.y);
+  const rightNoseAlar = point(centerX + bounds.width * 0.06, noseBase.y);
+
+  const mouthLeft = landmarks.MOUTH_LEFT ?? point(centerX - bounds.width * 0.16, bounds.y + bounds.height * 0.74);
+  const mouthRight = landmarks.MOUTH_RIGHT ?? point(centerX + bounds.width * 0.16, bounds.y + bounds.height * 0.74);
+  const upperLipTopPt = point(centerX, bounds.y + bounds.height * 0.71);
+  const upperLipBottomPt = point(centerX, bounds.y + bounds.height * 0.74);
+  const lowerLipTopPt = point(centerX, bounds.y + bounds.height * 0.76);
+  const lowerLipBottomPt = landmarks.MOUTH_BOTTOM ?? point(centerX, bounds.y + bounds.height * 0.79);
+
+  const chin = point(centerX, bounds.y + bounds.height * 0.97);
+  const hairline = estimateHairline(browCenter, noseBase, bounds);
+  const leftJaw = point(bounds.x + bounds.width * 0.22, bounds.y + bounds.height * 0.82);
+  const rightJaw = point(bounds.x + bounds.width * 0.78, bounds.y + bounds.height * 0.82);
+  const leftCheek = landmarks.LEFT_CHEEK ?? point(bounds.x + bounds.width * 0.18, centerY);
+  const rightCheek = landmarks.RIGHT_CHEEK ?? point(bounds.x + bounds.width * 0.82, centerY);
+
+  const faceContour = contours.FACE ?? [
+    point(bounds.x + bounds.width * 0.2, bounds.y + bounds.height * 0.12),
+    leftCheek,
+    leftJaw,
+    chin,
+    rightJaw,
+    rightCheek,
+    point(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.12),
+  ];
+  const symmetryMidX = (leftCheek.x + rightCheek.x) / 2;
+  const leftContour = faceContour.filter((p) => p.x <= symmetryMidX);
+  const rightContour = faceContour.filter((p) => p.x > symmetryMidX);
+
+  return {
+    hairline,
+    leftBrowInner,
+    leftBrowOuter,
+    rightBrowInner,
+    rightBrowOuter,
+    browCenter,
+    leftEyeInner,
+    leftEyeOuter,
+    leftEyeCenter,
+    rightEyeInner,
+    rightEyeOuter,
+    rightEyeCenter,
+    nasion,
+    noseTip,
+    noseBase,
+    leftNoseAlar,
+    rightNoseAlar,
+    mouthLeft,
+    mouthRight,
+    upperLipTop: upperLipTopPt,
+    upperLipBottom: upperLipBottomPt,
+    lowerLipTop: lowerLipTopPt,
+    lowerLipBottom: lowerLipBottomPt,
+    chin,
+    leftJaw,
+    rightJaw,
+    leftCheek,
+    rightCheek,
+    leftContour: leftContour.length > 0 ? leftContour : [leftCheek, leftJaw, chin],
+    rightContour: rightContour.length > 0 ? rightContour : [chin, rightJaw, rightCheek],
+  };
+}
+
 /**
  * Map MLKit face detection results to named FacialPoints.
  * Returns null if insufficient landmarks are detected.
  */
 export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null {
-  const { landmarks, contours, bounds } = face;
+  const { bounds } = face;
+  const rawLandmarks = face.landmarks;
+  const rawContours = face.contours;
 
-  if (!landmarks || !contours) {
+  if (!rawLandmarks && !rawContours) {
     return null;
   }
+
+  const landmarks = rawLandmarks ?? {};
+  const contours = rawContours ?? {};
 
   const faceContour = contours.FACE ?? [];
   const leftEyeContour = contours.LEFT_EYE ?? [];
@@ -228,7 +334,7 @@ export function mapMLKitToFacialPoints(face: MLKitFaceData): FacialPoints | null
 
   // We need minimum contour data to proceed
   if (faceContour.length < 10 || leftEyeContour.length < 4 || rightEyeContour.length < 4) {
-    return null;
+    return buildApproximateFacialPoints(face);
   }
 
   // Eye centers from landmarks or contour midpoints

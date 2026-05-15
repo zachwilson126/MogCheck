@@ -1,412 +1,458 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, NativeModules, View, Text, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Camera,
-  useCameraDevice,
-  useCameraPermission,
-  useFrameProcessor,
-} from 'react-native-vision-camera';
-import { useFaceDetector } from 'react-native-vision-camera-face-detector/src/FaceDetector';
-import type { Face } from 'react-native-vision-camera-face-detector/src/FaceDetector';
-import { Worklets, useSharedValue } from 'react-native-worklets-core';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { colors } from '../lib/constants/theme';
-import { FaceGuide } from '../components/camera/FaceGuide';
-import { ScanAnimation } from '../components/camera/ScanAnimation';
-import { GlowButton } from '../components/shared/GlowButton';
 import { useScanStore } from '../lib/store/useScanStore';
 import { useUserStore } from '../lib/store/useUserStore';
-import { mapMLKitToFacialPoints, medianFacialPoints, validateFacialPoints } from '../lib/analysis/landmarkMapper';
+import { mapMLKitToFacialPoints, validateFacialPoints } from '../lib/analysis/landmarkMapper';
 import { analyzeface } from '../lib/analysis/scoreEngine';
 import { preloadInterstitial, showInterstitial, preloadRewarded } from '../lib/ads/adManager';
-import { useScreenShake } from '../lib/hooks/useScreenShake';
 
-/** Directory to persist scan photos so they survive temp cleanup */
-const SCAN_PHOTOS_DIR = `${FileSystem.documentDirectory}scan-photos/`;
+const SCAN_PHOTOS_ROOT = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? null;
+const SCAN_PHOTOS_DIR = SCAN_PHOTOS_ROOT ? `${SCAN_PHOTOS_ROOT}scan-photos/` : null;
 
-// Rotating meme text for each scan phase
 const IDLE_TEXTS = [
-  'show me what ur working with',
-  'put ur face in the circle bro',
-  'we need to see the damage',
-  'step into the mog zone',
-  'face in the oval. no hiding.',
+  'take a straight-on photo with good light',
+  'keep your whole face visible and level',
+  'the less weird the angle, the better the read',
 ];
-const DETECTED_TEXTS = [
-  'face locked in. moment of truth.',
-  'ok we see u. tap to get rated.',
-  'victim identified. tap to scan.',
-  'aura detected. ready when u are.',
-  'bone structure loading... tap go.',
-  'locking onto ur canthal tilt rn',
-];
+
 const ANALYZING_TEXTS = [
-  'the algorithm is COOKING rn... 🔥',
-  'hold on this is gonna be brutal... 💀',
+  'the algorithm is cooking...',
+  'checking the damage...',
   'calculating mog potential...',
-  'measuring ur orbital rim rn...',
   'consulting the golden ratio gods...',
   'running bone structure diagnostics...',
-  'scanning for NPC energy...',
-  'cross-referencing with gigachads...',
-  'checking canthal tilt angle...',
-  'computing facial harmony index...',
-  'this might hurt ur feelings...',
-  'no cap analyzing rn...',
 ];
 
 const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
-export default function ScanScreen() {
-  const router = useRouter();
-  const cameraRef = useRef<any>(null);
-  const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice('front');
-
-  const {
-    phase,
-    startScan, setAnalyzing, setResult, setError, reset,
-  } = useScanStore();
-  const addScan = useUserStore((s) => s.addScan);
-
-  const [feedbackText, setFeedbackText] = useState(pick(IDLE_TEXTS));
-  const [capturing, setCapturing] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [cameraInitialized, setCameraInitialized] = useState(false);
-  const lastFaceRef = useRef<Face | null>(null);
-  const faceBufferRef = useRef<Face[]>([]);
-  const analyzingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const FACE_BUFFER_SIZE = 15;
-  const { shakeX, triggerShake } = useScreenShake();
-
-  const captureShakeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shakeX.value }],
-  }));
-
-  // Face detection via frame processor (no Skia dependency)
-  const { detectFaces } = useFaceDetector({
+const FACE_DETECTION_PASSES = [
+  {
     performanceMode: 'accurate',
     landmarkMode: 'all',
     contourMode: 'all',
     classificationMode: 'all',
     minFaceSize: 0.1,
-  });
-  const isAsyncBusy = useSharedValue(false);
+  },
+  {
+    performanceMode: 'fast',
+    landmarkMode: 'all',
+    contourMode: 'none',
+    classificationMode: 'none',
+    minFaceSize: 0.08,
+  },
+  {
+    performanceMode: 'fast',
+    landmarkMode: 'none',
+    contourMode: 'none',
+    classificationMode: 'none',
+    minFaceSize: 0.05,
+  },
+] as const;
 
-  const handleFacesDetected = useCallback((faces: Face[]) => {
-    if (phase !== 'detecting') return;
+type ScanDetectedFace = {
+  bounds?: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  };
+};
 
-    if (faces.length > 0) {
-      lastFaceRef.current = faces[0];
-      // Buffer last N face detections for averaging on capture
-      faceBufferRef.current.push(faces[0]);
-      if (faceBufferRef.current.length > FACE_BUFFER_SIZE) {
-        faceBufferRef.current.shift();
+type ScanCapturedPhoto = {
+  uri: string;
+  width: number;
+  height: number;
+};
+
+type ScanAnalyzerModules = {
+  detectFaces: typeof import('react-native-vision-camera-face-detector/src/ImageFaceDetector').detectFaces;
+};
+
+let scanAnalyzerModules: ScanAnalyzerModules | null = null;
+
+function normalizeFileUri(path: string): string {
+  return path.startsWith('file://') ? path : `file://${path}`;
+}
+
+async function ensureScanPhotosDirectory(): Promise<void> {
+  if (!SCAN_PHOTOS_DIR) {
+    return;
+  }
+
+  await FileSystem.makeDirectoryAsync(SCAN_PHOTOS_DIR, { intermediates: true }).catch(() => {});
+}
+
+async function persistSelectedPhoto(uri: string): Promise<ScanCapturedPhoto> {
+  await ensureScanPhotosDirectory();
+
+  const normalizedUri = normalizeFileUri(uri);
+  const sourceUri = normalizedUri;
+  const destinationUri = SCAN_PHOTOS_DIR
+    ? `${SCAN_PHOTOS_DIR}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`
+    : normalizedUri;
+
+  if (destinationUri !== sourceUri) {
+    await FileSystem.copyAsync({
+      from: sourceUri,
+      to: destinationUri,
+    }).catch(async () => {
+      const manipulated = await manipulateAsync(
+        sourceUri,
+        [],
+        { compress: 1, format: SaveFormat.JPEG },
+      );
+      if (manipulated.uri !== destinationUri) {
+        await FileSystem.copyAsync({ from: manipulated.uri, to: destinationUri });
       }
-      setFaceDetected(true);
-      setFeedbackText(pick(DETECTED_TEXTS));
-    } else {
-      lastFaceRef.current = null;
-      faceBufferRef.current = [];
-      setFaceDetected(false);
-      setFeedbackText(pick(IDLE_TEXTS));
-    }
-  }, [phase]);
+    });
+  }
 
-  const handleFacesJS = Worklets.createRunOnJS(handleFacesDetected);
+  const info = await manipulateAsync(
+    destinationUri,
+    [],
+    { compress: 1, format: SaveFormat.JPEG },
+  );
 
-  const frameProcessor = useFrameProcessor((frame) => {
-    'worklet';
-    if (isAsyncBusy.value) return;
-    isAsyncBusy.value = true;
+  return {
+    uri: info.uri,
+    width: info.width,
+    height: info.height,
+  };
+}
+
+async function buildDetectionImageCandidates(photo: ScanCapturedPhoto): Promise<string[]> {
+  const candidates = [photo.uri];
+
+  if (photo.width <= photo.height) {
+    return candidates;
+  }
+
+  for (const rotation of [90, -90]) {
     try {
-      const faces = detectFaces(frame);
-      handleFacesJS(faces);
-    } catch (_e) {
-      // skip frame on error
-    } finally {
-      isAsyncBusy.value = false;
+      const rotated = await manipulateAsync(
+        photo.uri,
+        [{ rotate: rotation }],
+        {
+          compress: 1,
+          format: SaveFormat.JPEG,
+        },
+      );
+      candidates.push(rotated.uri);
+    } catch (rotationError) {
+      if (__DEV__) {
+        console.warn('[MogCheck] Failed to rotate scan candidate:', rotation, rotationError);
+      }
     }
-  }, [detectFaces, handleFacesJS]);
+  }
+
+  return [...new Set(candidates)];
+}
+
+function getScanAnalyzerModules(): ScanAnalyzerModules {
+  if (!scanAnalyzerModules) {
+    const imageFaceDetector = require('react-native-vision-camera-face-detector/src/ImageFaceDetector') as typeof import('react-native-vision-camera-face-detector/src/ImageFaceDetector');
+
+    if (!NativeModules.ImageFaceDetector) {
+      throw new Error('Face detector native module is unavailable in this build.');
+    }
+
+    scanAnalyzerModules = {
+      detectFaces: imageFaceDetector.detectFaces,
+    };
+  }
+
+  return scanAnalyzerModules;
+}
+
+async function detectFacesWithFallbacks(photo: ScanCapturedPhoto) {
+  const { detectFaces } = getScanAnalyzerModules();
+  const imageCandidates = await buildDetectionImageCandidates(photo);
+
+  for (const imageUri of imageCandidates) {
+    for (const options of FACE_DETECTION_PASSES) {
+      try {
+        const faces = await detectFaces({
+          image: imageUri,
+          options,
+        });
+
+        if (Array.isArray(faces) && faces.length > 0) {
+          return {
+            faces,
+            imageUri,
+          };
+        }
+      } catch (detectionError) {
+        if (__DEV__) {
+          console.warn('[MogCheck] Face detection pass failed:', options, detectionError);
+        }
+      }
+    }
+  }
+
+  return {
+    faces: [] as ScanDetectedFace[],
+    imageUri: photo.uri,
+  };
+}
+
+export default function ScanScreen() {
+  const router = useRouter();
+  const phase = useScanStore((s) => s.phase);
+  const error = useScanStore((s) => s.error);
+  const startScan = useScanStore((s) => s.startScan);
+  const setAnalyzing = useScanStore((s) => s.setAnalyzing);
+  const setResult = useScanStore((s) => s.setResult);
+  const setError = useScanStore((s) => s.setError);
+  const reset = useScanStore((s) => s.reset);
+  const addScan = useUserStore((s) => s.addScan);
+
+  const [feedbackText, setFeedbackText] = useState(pick(IDLE_TEXTS));
+  const [working, setWorking] = useState(false);
+  const analyzingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!hasPermission) {
-      requestPermission();
-    }
     startScan();
-    // Pre-load ads so they're ready
     preloadInterstitial();
     preloadRewarded();
+
     return () => {
       reset();
-      setCameraInitialized(false);
-      if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
+      if (analyzingIntervalRef.current) {
+        clearInterval(analyzingIntervalRef.current);
+      }
     };
-  }, []);
+  }, [reset, startScan]);
 
-  const handleManualCapture = async () => {
-    if (!cameraRef.current || phase !== 'detecting' || capturing || !cameraInitialized) return;
-
-    const faceData = lastFaceRef.current;
-    if (!faceData) {
-      setError('No face detected. Position your face in the oval and try again.');
-      return;
-    }
-
-    setCapturing(true);
-    setAnalyzing();
-    setFeedbackText(pick(ANALYZING_TEXTS));
-
-    // Cycle through meme analyzing messages
-    analyzingIntervalRef.current = setInterval(() => {
-      setFeedbackText(pick(ANALYZING_TEXTS));
-    }, 1200);
-
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      triggerShake();
-
-      // Take photo and persist to document directory (temp files get cleaned up by iOS)
-      const photo = await cameraRef.current.takePhoto();
-      const tempUri = `file://${photo.path}`;
-
-      // Ensure scan-photos directory exists, then copy
-      await FileSystem.makeDirectoryAsync(SCAN_PHOTOS_DIR, { intermediates: true }).catch(() => {});
-      const persistedPath = `${SCAN_PHOTOS_DIR}${Date.now()}.jpg`;
-      await FileSystem.copyAsync({ from: tempUri, to: persistedPath });
-      const photoUri = persistedPath;
-
-      if (__DEV__) {
-        console.log('[MogCheck] Photo captured:', photo.width, 'x', photo.height);
-        console.log('[MogCheck] Face data - bounds:', JSON.stringify(faceData.bounds));
-        console.log('[MogCheck] Has landmarks:', !!faceData.landmarks);
-        console.log('[MogCheck] Has contours:', !!faceData.contours);
-      }
-
-      // Map all buffered face frames to facial points, validate each,
-      // then use median selection to reject outlier frames.
-      // Median is robust to single bad frames unlike averaging.
-      const bufferedFaces = faceBufferRef.current.length > 0
-        ? faceBufferRef.current
-        : [faceData];
-      const allPoints = bufferedFaces
-        .map(f => mapMLKitToFacialPoints(f as any))
-        .filter((p): p is NonNullable<typeof p> => p !== null)
-        .filter(p => validateFacialPoints(p));
-
-      if (allPoints.length === 0) {
-        // If all buffered frames failed validation, try the latest single frame
-        const fallback = mapMLKitToFacialPoints(faceData as any);
-        if (!fallback) {
-          if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
-          setError('bro we literally cannot find ur face rn. try better lighting fr.');
-          setCapturing(false);
-          return;
-        }
-        allPoints.push(fallback);
-      }
-
-      const points = medianFacialPoints(allPoints);
-
-      if (__DEV__) {
-        console.log(`[MogCheck] Used median of ${allPoints.length} valid frames for analysis`);
-      }
-
-      if (__DEV__) {
-        console.log('[MogCheck] Key points:', JSON.stringify({
-          hairline: points.hairline,
-          browCenter: points.browCenter,
-          noseBase: points.noseBase,
-          chin: points.chin,
-          leftCheek: points.leftCheek,
-          rightCheek: points.rightCheek,
-          leftJaw: points.leftJaw,
-          rightJaw: points.rightJaw,
-          nasion: points.nasion,
-        }));
-      }
-
-      // Dramatic pause for the scanning animation
-      await new Promise((resolve) => setTimeout(resolve, 3500));
-
-      // Stop cycling text
-      if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
-
-      // Run analysis
-      const result = analyzeface(points);
-
-      if (__DEV__) {
-        console.log('[MogCheck] Ratios:', result.ratios.map(r =>
-          `${r.name}: ${r.measured.toFixed(3)} (ideal ${r.ideal.toFixed(3)}) → ${(r.score * 10).toFixed(1)}`
-        ).join('\n'));
-      }
-
-      // Save to stores
-      setResult(result, photoUri);
-      addScan(result, photoUri);
-
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Show interstitial ad before results (waits for close or skips if not loaded)
-      await showInterstitial();
-
-      // Navigate to results
-      const scanHistory = useUserStore.getState().scanHistory;
-      const latestScan = scanHistory[0];
-      if (latestScan) {
-        router.replace(`/results/${latestScan.id}`);
-      }
-    } catch (err) {
-      if (__DEV__) console.error('[MogCheck] Scan error:', err);
-      if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
-      setError('the algorithm broke. even AI gave up on u. try again.');
-    } finally {
-      setCapturing(false);
+  const clearAnalyzingInterval = () => {
+    if (analyzingIntervalRef.current) {
+      clearInterval(analyzingIntervalRef.current);
+      analyzingIntervalRef.current = null;
     }
   };
 
-  const handleCameraError = useCallback((error: { code?: string; message?: string }) => {
-    if (__DEV__) {
-      console.error('[MogCheck] Camera error:', error.code, error.message);
+  const beginAnalyzing = () => {
+    setAnalyzing();
+    setFeedbackText(pick(ANALYZING_TEXTS));
+    clearAnalyzingInterval();
+    analyzingIntervalRef.current = setInterval(() => {
+      setFeedbackText(pick(ANALYZING_TEXTS));
+    }, 1200);
+  };
+
+  const finishWithFaces = async (photo: ScanCapturedPhoto) => {
+    const { faces, imageUri } = await detectFacesWithFallbacks(photo);
+
+    if (!Array.isArray(faces) || faces.length === 0) {
+      throw new Error('NO_FACE');
     }
 
-    setCameraInitialized(false);
-    setCapturing(false);
+    const sortedFaces = [...faces].sort((a, b) => {
+      const aArea = (a.bounds?.width ?? 0) * (a.bounds?.height ?? 0);
+      const bArea = (b.bounds?.width ?? 0) * (b.bounds?.height ?? 0);
+      return bArea - aArea;
+    });
 
-    if (analyzingIntervalRef.current) {
-      clearInterval(analyzingIntervalRef.current);
+    const mapped = sortedFaces
+      .map((face) => mapMLKitToFacialPoints(face as any))
+      .filter((candidate): candidate is NonNullable<typeof candidate> => !!candidate);
+
+    const validPoints = mapped.find((candidate) => validateFacialPoints(candidate));
+    const points = validPoints ?? mapped[0];
+
+    if (!points) {
+      throw new Error('BAD_READ');
     }
 
-    setError('camera crashed mid-scan. give it a second and try again.');
-  }, [setError]);
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    clearAnalyzingInterval();
 
-  // Permission denied
-  if (!hasPermission) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <Text style={styles.title}>bro said no to camera</Text>
-          <Text style={styles.errorText}>we literally cannot rate you without seeing your face. that's how this works.</Text>
-          <GlowButton title="fine, allow it" onPress={requestPermission} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+    const result = analyzeface(points);
+    setResult(result, imageUri);
+    addScan(result, imageUri);
 
-  // No camera device
-  if (!device) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <Text style={styles.title}>no camera found</Text>
-          <Text style={styles.errorText}>ur device is a literal brick. how do u even take selfies.</Text>
-          <GlowButton title="go back" onPress={() => router.back()} variant="secondary" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await showInterstitial();
+
+    const scanHistory = useUserStore.getState().scanHistory;
+    const latestScan = scanHistory[0];
+    if (latestScan) {
+      router.replace(`/results/${latestScan.id}`);
+    }
+  };
+
+  const handlePickedAsset = async (asset?: ImagePicker.ImagePickerAsset) => {
+    if (!asset?.uri) {
+      return;
+    }
+
+    setWorking(true);
+    beginAnalyzing();
+
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      const persistedPhoto = await persistSelectedPhoto(asset.uri);
+      await finishWithFaces(persistedPhoto);
+    } catch (scanError) {
+      clearAnalyzingInterval();
+
+      if (__DEV__) {
+        console.error('[MogCheck] Scan error:', scanError);
+      }
+
+      if (scanError instanceof Error && scanError.message === 'NO_FACE') {
+        setError('we got the photo but could not lock onto a face. move closer and try better light.');
+      } else if (scanError instanceof Error && scanError.message === 'BAD_READ') {
+        setError('we got a bad read on that photo. keep your face level and centered.');
+      } else {
+        setError('the scanner blew up mid-run. try one more time.');
+      }
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const launchCamera = async () => {
+    if (working) return;
+
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Camera Required', 'We need camera permission to take a scan photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        cameraType: ImagePicker.CameraType.front,
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN,
+      });
+
+      if (!result.canceled) {
+        await handlePickedAsset(result.assets?.[0]);
+      }
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[MogCheck] launchCamera failed:', error);
+      }
+      setError('camera launch failed on this device. try picking a photo instead.');
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    if (working) return;
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Photos Required', 'We need photo access if you want to pick an existing image.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        selectionLimit: 1,
+      });
+
+      if (!result.canceled) {
+        await handlePickedAsset(result.assets?.[0]);
+      }
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[MogCheck] launchImageLibrary failed:', error);
+      }
+      setError('photo picker failed on this device. try the camera button again.');
+    }
+  };
 
   return (
-    <Animated.View style={[styles.container, captureShakeStyle]}>
-      {/* Camera with face detection frame processor */}
-      <Camera
-        ref={cameraRef}
-        style={[StyleSheet.absoluteFill, styles.camera]}
-        device={device}
-        isActive={phase === 'detecting' || phase === 'analyzing'}
-        photo
-        pixelFormat="yuv"
-        frameProcessor={phase === 'detecting' && !capturing ? frameProcessor : undefined}
-        onInitialized={() => setCameraInitialized(true)}
-        onError={handleCameraError}
-      />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>start scan</Text>
+        <Text style={styles.subtitle}>
+          {phase === 'analyzing'
+            ? feedbackText
+            : 'use the system camera for the safest iPad path, then we will analyze the photo.'}
+        </Text>
 
-      {!cameraInitialized && (
-        <View style={styles.cameraLoadingOverlay}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.cameraLoadingTitle}>warming up the scanner...</Text>
-          <Text style={styles.cameraLoadingText}>getting the camera ready so we do not jump-scare u</Text>
+        <View style={styles.guideCard}>
+          <Text style={styles.guideHeadline}>Best results</Text>
+          <Text style={styles.guideBullet}>Face straight toward the camera</Text>
+          <Text style={styles.guideBullet}>Good light, no harsh shadow</Text>
+          <Text style={styles.guideBullet}>Whole face visible, no weird angle</Text>
         </View>
-      )}
 
-      {/* Face Guide Overlay */}
-      <FaceGuide faceDetected={faceDetected} faceAligned={faceDetected} />
-
-      {/* Scan Animation */}
-      <ScanAnimation visible={phase === 'analyzing'} />
-
-      {/* Feedback Text */}
-      <SafeAreaView style={styles.feedbackContainer}>
-        <View style={styles.feedbackBadge}>
-          <View style={[styles.indicator, faceDetected && styles.indicatorActive]} />
-          <Text style={styles.feedbackText}>{feedbackText}</Text>
-        </View>
-      </SafeAreaView>
-
-      {/* Bottom Controls */}
-      <SafeAreaView style={styles.bottomControls}>
-        {phase === 'detecting' && (
-          <>
-            {/* Capture Button */}
-            <Pressable
-              onPress={handleManualCapture}
-              disabled={capturing}
-              style={({ pressed }) => [
-                styles.captureButton,
-                faceDetected && styles.captureButtonReady,
-                pressed && styles.captureButtonPressed,
-              ]}
-            >
-              <View style={[
-                styles.captureButtonInner,
-                faceDetected && styles.captureButtonInnerReady,
-              ]} />
-            </Pressable>
-
-            <Text style={styles.captureHint}>
-              {faceDetected ? 'tap to find out the truth' : 'we need to see ur face bro'}
-            </Text>
-          </>
+        {working ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>{feedbackText}</Text>
+          </View>
+        ) : (
+          <View style={styles.actions}>
+            <ActionButton title="take photo" onPress={() => void launchCamera()} />
+            <ActionButton title="pick existing photo" onPress={() => void pickFromLibrary()} variant="secondary" />
+            <ActionButton title="go back" onPress={() => router.back()} variant="ghost" />
+          </View>
         )}
+      </View>
 
-        {phase === 'analyzing' && (
-          <Text style={styles.analyzingText}>{feedbackText}</Text>
-        )}
-
-        {/* Cancel Button */}
-        <Pressable
-          onPress={() => {
-            if (analyzingIntervalRef.current) clearInterval(analyzingIntervalRef.current);
-            reset();
-            router.back();
-          }}
-          style={styles.cancelButton}
-        >
-          <Text style={styles.cancelText}>nah im good</Text>
-        </Pressable>
-      </SafeAreaView>
-
-      {/* Error State */}
-      {useScanStore.getState().error && (
+      {error && (
         <View style={styles.errorOverlay}>
-          <Text style={styles.errorText}>{useScanStore.getState().error}</Text>
-          <GlowButton
+          <Text style={styles.errorText}>{error}</Text>
+          <ActionButton
             title="run it back"
             onPress={() => {
               startScan();
-              setCapturing(false);
+              clearAnalyzingInterval();
               setFeedbackText(pick(IDLE_TEXTS));
             }}
-            size="medium"
           />
         </View>
       )}
-    </Animated.View>
+    </SafeAreaView>
+  );
+}
+
+function ActionButton({
+  title,
+  onPress,
+  variant = 'primary',
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'ghost';
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        variant === 'secondary' && styles.actionButtonSecondary,
+        variant === 'ghost' && styles.actionButtonGhost,
+        pressed && styles.actionButtonPressed,
+      ]}
+    >
+      <Text
+        style={[
+          styles.actionButtonText,
+          variant === 'secondary' && styles.actionButtonTextSecondary,
+          variant === 'ghost' && styles.actionButtonTextGhost,
+        ]}
+      >
+        {title}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -415,132 +461,66 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  camera: {
-    backgroundColor: colors.background,
-  },
-  centered: {
+  content: {
     flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    gap: 16,
-  },
-  cameraLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    gap: 12,
-    zIndex: 1,
-  },
-  cameraLoadingTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 20,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  cameraLoadingText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
+    gap: 20,
   },
   title: {
     fontFamily: 'BebasNeue_400Regular',
-    fontSize: 32,
+    fontSize: 42,
+    letterSpacing: 2,
     color: colors.primary,
     textAlign: 'center',
   },
-  feedbackContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    paddingTop: 16,
+  subtitle: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 16,
+    lineHeight: 24,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
-  feedbackBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  guideCard: {
+    backgroundColor: colors.surface,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 20,
+    gap: 10,
   },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#666',
-  },
-  indicatorActive: {
-    backgroundColor: colors.primary,
-  },
-  feedbackText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  guideHeadline: {
+    fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 16,
     color: colors.text,
   },
-  bottomControls: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    paddingBottom: 20,
+  guideBullet: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  actions: {
     gap: 12,
   },
-  captureButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.5)',
-    justifyContent: 'center',
+  loadingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 24,
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    gap: 14,
   },
-  captureButtonReady: {
-    borderColor: '#fff',
-  },
-  captureButtonPressed: {
-    opacity: 0.6,
-  },
-  captureButtonInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  captureButtonInnerReady: {
-    backgroundColor: '#fff',
-  },
-  captureHint: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  analyzingText: {
+  loadingText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 16,
-    color: colors.primary,
-    marginBottom: 20,
-  },
-  cancelButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
-  cancelText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: colors.text,
+    textAlign: 'center',
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.88)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -549,7 +529,41 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: 'PlusJakartaSans_500Medium',
     fontSize: 16,
+    lineHeight: 24,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  actionButton: {
+    minHeight: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+  },
+  actionButtonSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionButtonGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  actionButtonPressed: {
+    opacity: 0.82,
+  },
+  actionButtonText: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 16,
+    textTransform: 'uppercase',
+    color: colors.background,
+  },
+  actionButtonTextSecondary: {
+    color: colors.text,
+  },
+  actionButtonTextGhost: {
+    color: colors.textSecondary,
   },
 });
